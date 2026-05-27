@@ -1,0 +1,19 @@
+body {
+    background-color: #0E1117;
+    color: white;
+}
+
+.stTextInput input {
+    border-radius: 10px;
+}
+
+.stButton button {
+    border-radius: 10px;
+    background-color: #4CAF50;
+    color: white;
+}
+
+.stChatMessage {
+    border-radius: 12px;
+    padding: 10px;
+}
