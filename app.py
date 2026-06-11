@@ -122,6 +122,9 @@ for key, value in init_states.items():
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
+# Update this line to be just your main app URL:
+REDIRECT_URI = "https://smart-agent-workspace.streamlit.app"
+
 oauth2 = OAuth2Component(
     CLIENT_ID,
     CLIENT_SECRET,
