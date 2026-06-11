@@ -481,18 +481,6 @@ def local_text_to_speech_stream(text_content):
         return audio_buffer.getvalue()
     except Exception as e:
         return None
-# ========================================================
-#from chatbot.llm import get_response, get_image_response
- import os
- #import jwt 
- import uuid
- import requests
- import PyPDF2
-import streamlit as st
-from PIL import Image
-from io import BytesIO
-from dotenv import load_dotenv
-from streamlit_oauth import OAuth2Component
 
 # Import custom chatbot database routines
 from chatbot.database import (
