@@ -1,10 +1,8 @@
 streamlit
 groq
 python-dotenv
-SpeechRecognition
-pyttsx3
-pyaudio
 pillow
 PyPDF2
-sqlalchemy
-bcrypt
+gTTS
+PyJWT
+streamlit-oauth
