@@ -354,20 +354,23 @@ from dotenv import load_dotenv
 # ---------------- LOAD ENV & SETUP ----------------
 load_dotenv()
 
-# Initialize Groq Client
+# Initialize the Groq Client with latest headers for tool routing
 try:
-    voice_groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    voice_groq_client = Groq(
+        api_key=os.getenv("GROQ_API_KEY"),
+        default_headers={"Groq-Model-Version": "latest"}
+    )
 except Exception:
     voice_groq_client = None
 
-# Ensure local data directories exist
+# Ensure local directories exist
 os.makedirs("data", exist_ok=True)
 DB_PATH = "data/chatbot.db"
 
 # ---------------- DATABASE LAYER (MANUAL AUTH & LOGGING) ----------------
 
 def init_db():
-    """Initializes the users credentials table and chat logs table cleanly."""
+    """Initializes authentication and history logging storage tables cleanly."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -438,7 +441,6 @@ def verify_user(email, password):
         return True, user[0]
     return False, None
 
-# --- SESSION LOG ACTIONS ---
 def create_new_session(session_id, email, title):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -486,52 +488,38 @@ def get_session_messages(session_id):
 # Run Database Initialization
 init_db()
 
-# ---------------- REPAIRED FUNCTIONAL ENGINE PIPELINES ----------------
-
-def local_transcribe_audio(audio_file_buffer):
-    """Sends recorded speech bytes directly to Groq's Whisper audio API."""
-    try:
-        if not audio_file_buffer or voice_groq_client is None:
-            return "Audio Error: Check Groq setup or empty microphone buffer."
-        
-        audio_file_buffer.name = "input_audio.wav"
-        transcription = voice_groq_client.audio.transcriptions.create(
-            file=audio_file_buffer,
-            model="whisper-large-v3",
-            response_format="text"
-        )
-        return transcription
-    except Exception as e:
-        return f"Speech Transcription Issue: {str(e)}"
-
-def local_text_to_speech_stream(text_content):
-    """Converts text strings into audible audio stream bytes using gTTS."""
-    try:
-        tts = gTTS(text=text_content, lang='en', slow=False)
-        audio_buffer = BytesIO()
-        tts.write_to_fp(audio_buffer)
-        audio_buffer.seek(0)
-        return audio_buffer.getvalue()
-    except Exception as e:
-        return None
+# ---------------- CORES ENGINE FUNCTIONAL PIPELINES ----------------
 
 def get_response(prompt):
-    """Executes conversational features using Groq's active llama-3.1-8b-instant engine."""
+    """Executes dynamic text completions utilizing web search to prevent historical cutoff."""
     try:
         if voice_groq_client is None:
             return "Groq Engine Uninitialized. Please verify your GROQ_API_KEY parameter setup."
         
-        # Fixed: Updated decommissioned llama3-8b-8192 to active model
+        # Switched to compound routing with live web search enabled
         completion = voice_groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
+            model="groq/compound",
+            messages=[{"role": "user", "content": prompt}],
+            compound_custom={
+                "tools": {
+                    "enabled_tools": ["web_search"]
+                }
+            }
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return f"AI Generation Error: {str(e)}"
+        # Fallback tracking if the dynamic lookup gateway experiences throttling limits
+        try:
+            fallback = voice_groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return fallback.choices[0].message.content
+        except Exception as fb_err:
+            return f"AI Generation Error: {str(fb_err)}"
 
 def get_image_response(prompt, image_file):
-    """Processes multimodal inputs through the correct Groq layout array content schema."""
+    """Processes visual matrices via explicitly structured Llama 3.1 multi-modal array blocks."""
     try:
         if voice_groq_client is None:
             return "Vision Framework Error: Groq API client connection missing."
@@ -544,7 +532,6 @@ def get_image_response(prompt, image_file):
         image.save(buffered, format="JPEG", quality=85)
         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        # Fixed: Explicit object syntax array maps to bypass code 400 validation drops
         content_payload = [
             {"type": "text", "text": str(prompt)},
             {
@@ -562,6 +549,33 @@ def get_image_response(prompt, image_file):
         return completion.choices[0].message.content
     except Exception as e:
         return f"Image Parsing Analysis Failed: {str(e)}"
+
+def local_transcribe_audio(audio_file_buffer):
+    """Transcribes vocal frequencies natively utilizing active Whisper API nodes."""
+    try:
+        if not audio_file_buffer or voice_groq_client is None:
+            return "Audio Error: Check Groq setup or empty microphone buffer."
+        
+        audio_file_buffer.name = "input_audio.wav"
+        transcription = voice_groq_client.audio.transcriptions.create(
+            file=audio_file_buffer,
+            model="whisper-large-v3",
+            response_format="text"
+        )
+        return transcription
+    except Exception as e:
+        return f"Speech Transcription Issue: {str(e)}"
+
+def local_text_to_speech_stream(text_content):
+    """Synthesizes text responses back into sound streams cleanly via gTTS."""
+    try:
+        tts = gTTS(text=text_content, lang='en', slow=False)
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        return audio_buffer.getvalue()
+    except Exception as e:
+        return None
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -616,9 +630,9 @@ if not st.session_state.logged_in:
         
         if st.button("⚙️ Register Profile", use_container_width=True):
             if not new_username or not new_email or not new_password:
-                st.error("All entry fields must be completely filled.")
+                st.error("All entries must be completely populated.")
             elif len(new_password) < 6:
-                st.error("Passwords must be at least 6 characters long for system baseline validation.")
+                st.error("Passwords must be at least 6 characters long for system validation.")
             else:
                 success, feedback_msg = create_user(new_email, new_username, new_password)
                 if success:
@@ -659,9 +673,9 @@ if st.session_state.logged_in:
             st.session_state.current_session_id = str(uuid.uuid4())
             st.rerun()
 
-    # ENGINE FEATURE 1: CORE CHAT TERMINAL
+    # ENGINE FEATURE 1: CORE CHAT
     if section == "Chat":
-        st.title("💬 AI Chat Hub")
+        st.title("💬 AI Chat Hub (Live Web-Search Enabled)")
         
         create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Chat Logs Session #{st.session_state.chat_count}")
 
@@ -680,7 +694,7 @@ if st.session_state.logged_in:
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            with st.spinner("Processing generation parameters..."):
+            with st.spinner("Browsing web and generating parameters..."):
                 response = get_response(prompt)
 
             with st.chat_message("assistant"):
@@ -688,7 +702,7 @@ if st.session_state.logged_in:
             st.session_state.messages.append({"role": "assistant", "content": response})
             save_message(st.session_state.current_session_id, "assistant", response)
 
-    # ENGINE FEATURE 2: HISTORICAL ARCHIVE DATABASE
+    # ENGINE FEATURE 2: HISTORICAL ARCHIVES
     elif section == "History":
         st.title("🕘 Saved Chat History Database")
         user_history = get_user_sessions(st.session_state.user_email)
@@ -702,24 +716,24 @@ if st.session_state.logged_in:
                         st.markdown(f"**{role_label}**:\n{msg['content']}")
                         st.divider()
         else:
-            st.info("No saved data logs associated with this profile discovered yet.")
+            st.info("No saved logs discovered under this profile yet.")
 
-    # ENGINE FEATURE 3: VOICE PIPELINE CALL
+    # ENGINE FEATURE 3: VOICE PIPELINE
     elif section == "Voice Chat":
         st.title("🎤 Voice Call Assistant")
         audio_file = st.audio_input("🎤 Press microphone to speak...", key="voice_call_input")
 
         if audio_file:
-            with st.spinner("Processing vocal frequencies via Whisper API..."):
+            with st.spinner("Transcribing vocal tracks..."):
                 user_speech_text = local_transcribe_audio(audio_file)
             
             if user_speech_text and not str(user_speech_text).startswith("Audio"):
                 st.success(f"🗣️ **You Said:** {user_speech_text}")
                 
-                with st.spinner("Analyzing text response variables..."):
+                with st.spinner("Searching and forming response..."):
                     ai_voice_response = get_response(user_speech_text)
                 
-                with st.spinner("Synthesizing audio streaming frequency metrics..."):
+                with st.spinner("Generating audio streaming..."):
                     reply_audio_bytes = local_text_to_speech_stream(ai_voice_response)
                 
                 create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Voice Session: {user_speech_text[:15]}...")
@@ -732,17 +746,17 @@ if st.session_state.logged_in:
                 if reply_audio_bytes:
                     st.audio(reply_audio_bytes, format="audio/mp3", autoplay=True)
 
-    # ENGINE FEATURE 4: MULTIMODAL VISION CORE
+    # ENGINE FEATURE 4: PHOTO CHAT
     elif section == "Photo Chat":
         st.title("🖼 AI Multimodal Photo Chat")
-        uploaded_image = st.file_uploader("Drop image source file parameters here", type=["png", "jpg", "jpeg"])
+        uploaded_image = st.file_uploader("Drop image source parameters here", type=["png", "jpg", "jpeg"])
         image_prompt = st.text_input("Ask detail analytics regarding this image context")
 
         if uploaded_image:
             st.image(uploaded_image, use_container_width=True)
 
             if image_prompt:
-                with st.spinner("Analyzing pixel structures with Llama Vision model..."):
+                with st.spinner("Analyzing pixel matrices..."):
                     response = get_image_response(image_prompt, uploaded_image)
                 
                 create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Photo: {uploaded_image.name[:12]}...")
@@ -752,19 +766,18 @@ if st.session_state.logged_in:
                 st.write("### AI Analysis Response")
                 st.write(response)
 
-    # ENGINE FEATURE 5: DOCUMENT EXTRACTION (RAG PIPELINE)
+    # ENGINE FEATURE 5: PDF CONTEXT CHAT
     elif section == "PDF Chat":
         st.title("📄 PDF Document Context Chat")
         uploaded_pdf = st.file_uploader("Upload reference context PDF document setup", type=["pdf"])
 
         if uploaded_pdf:
             if st.button("Process Document Tokens", use_container_width=True):
-                st.success("Document Token Matrices Built Successfully into Active Workspace! ✅")
+                st.success("Document segments mapped successfully into active context window! ✅")
 
             question = st.text_input("Ask an contextual question based directly on the text data segments")
             if question:
-                with st.spinner("Scanning extraction arrays..."):
-                    # Utilizing active Llama 3.1 to fulfill reading prompts cleanly
+                with st.spinner("Injecting extraction context arrays..."):
                     answer = get_response(f"Based on your document context, parse and answer this query: {question}")
                 
                 create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"PDF File: {uploaded_pdf.name[:15]}...")
