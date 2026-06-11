@@ -1,8 +1,8 @@
 streamlit
 groq
-python-dotenv
-pillow
-PyPDF2
 gTTS
+Pillow
+requests
 PyJWT
-streamlit-oauth
+SpeechRecognition
+pyttsx3
