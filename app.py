@@ -131,9 +131,8 @@ oauth2 = OAuth2Component(
 section = "Chat"  
 
 if not st.session_state.logged_in:
-    # Dynamically track redirect target to prevent OAuth origin crashes in production cloud
-    current_url = "http://localhost:8501" if os.getenv("GROQ_API_KEY") is None else "https://advanced-ai-assistant.streamlit.app"
-    redirect_target = f"{current_url}/component/streamlit_oauth.authorize_button/index.html"
+    # FORCE YOUR LIVE CLOUD ENDPOINT URL FOR DEPLOYMENT:
+    redirect_target = "https://smart-agent-workspace.streamlit.app/component/streamlit_oauth.authorize_button/index.html"
     
     result = oauth2.authorize_button(
         "🔐 Login with Google",
