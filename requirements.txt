@@ -4,3 +4,5 @@ python-dotenv
 pillow
 PyPDF2
 gTTS
+PyJWT
+streamlit-oauth
