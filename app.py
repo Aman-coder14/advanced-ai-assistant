@@ -339,114 +339,175 @@
 #                 st.info(answer)
 
 import os
-import uuid
-import sqlite3
-import hashlib
-import requests
-import base64
-import jwt
 import streamlit as st
+import sqlite3
+from datetime import datetime
+from uuid import uuid4
 from groq import Groq
 from gtts import gTTS
 from io import BytesIO
+import base64
 from PIL import Image
-from dotenv import load_dotenv
-from streamlit_oauth import OAuth2Component
 
-# ---------------- LOAD ENV & SETUP ----------------
-load_dotenv()
+# ========================================================
+# 1. PAGE CONFIG & HIGH-END THEME INJECTION
+# ========================================================
+st.set_page_config(page_title="Advanced AI Multi-Agent Studio", layout="wide")
 
-# Initialize Groq Client
-try:
-    voice_groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-except Exception:
-    voice_groq_client = None
-
-# Ensure local directories exist
-os.makedirs("data", exist_ok=True)
-DB_PATH = "data/chatbot.db"
-
-# ---------------- OAUTH CONFIG ----------------
-CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-
-# Official fallback URI required by the streamlit-oauth package
-REDIRECT_URI = "https://smart-agent-workspace.streamlit.app/component/streamlit_oauth.authorize_button/index.html"
-
-oauth2 = OAuth2Component(
-    CLIENT_ID,
-    CLIENT_SECRET,
-    "https://accounts.google.com/o/oauth2/v2/auth",
-    "https://oauth2.googleapis.com/token",
-    "https://oauth2.googleapis.com/token",
-    "https://oauth2.googleapis.com/revoke"
-)
-
-# ---------------- CORE PIPELINES (RESTORED & REPAIRED) ----------------
-
-def get_response(prompt):
-    """Your original chat model completion pipeline."""
-    try:
-        if voice_groq_client is None:
-            return "Groq Engine Uninitialized."
+def inject_custom_design():
+    """Injects high-end, responsive modern CSS styling into the Streamlit layout."""
+    st.markdown(
+        """
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         
-        # FIXED: Swapped out decommissioned 'llama3-8b-8192' with active replacement
-        completion = voice_groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
+        <style>
+            /* Apply premium font across the app */
+            * {
+                font-family: 'Plus Jakarta Sans', sans-serif !important;
+            }
+            
+            /* Main Background styling */
+            .stApp {
+                background: radial-gradient(circle at 50% 50%, #121824 0%, #0b0f19 100%);
+            }
+            
+            /* Sidebar Styling Overhaul */
+            [data-testid="stSidebar"] {
+                background-color: #0d131f !important;
+                border-right: 1px solid #1e293b;
+            }
+            
+            /* High-end Glassmorphism Card Panels for content containers */
+            div.stButton > button, div[data-testid="stExpander"], .stTextInput > div > div, .stAudioInput, .stFileUploader {
+                background: rgba(255, 255, 255, 0.03) !important;
+                backdrop-filter: blur(12px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                border-radius: 12px !important;
+                color: #f8fafc !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            /* Interaction Hover states */
+            div.stButton > button:hover {
+                border-color: #6366f1 !important;
+                box-shadow: 0 0 20px rgba(99, 102, 241, 0.25) !important;
+                transform: translateY(-2px);
+                background: rgba(99, 102, 241, 0.1) !important;
+            }
+            
+            /* Center Login Form Layout styling */
+            .login-container {
+                max-width: 450px;
+                margin: 80px auto;
+                padding: 40px;
+                background: rgba(255, 255, 255, 0.02);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                text-align: center;
+                backdrop-filter: blur(20px);
+                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Apply global premium frontend UI theme wrapper
+inject_custom_design()
+
+# ========================================================
+# 2. DATABASE & MODEL BACKENDS INITIALIZATION
+# ========================================================
+DB_FILE = "chatbot.db"
+
+def init_db():
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                user_email TEXT,
+                title TEXT,
+                created_at TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                role TEXT,
+                content TEXT,
+                timestamp TEXT,
+                FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+            )
+        """)
+        conn.commit()
+
+init_db()
+
+# Core Database Hooks
+def create_new_session(session_id, email, title):
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM sessions WHERE session_id = ?", (session_id,))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO sessions VALUES (?, ?, ?, ?)", 
+                           (session_id, email, title, datetime.now().isoformat()))
+            conn.commit()
+
+def save_message(session_id, role, content):
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                       (session_id, role, content, datetime.now().isoformat()))
+        conn.commit()
+
+def get_user_sessions(email):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sessions WHERE user_email = ? ORDER BY created_at DESC", (email,))
+        return cursor.fetchall()
+
+def get_session_messages(session_id):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,))
+        return cursor.fetchall()
+
+# Initialize core model routing backends
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+def get_response(user_input):
+    try:
+        if not groq_client: return "API connection key missing."
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": user_input}],
+            temperature=0.5
         )
         return completion.choices[0].message.content
     except Exception as e:
         return f"AI Generation Error: {str(e)}"
 
-def get_image_response(prompt, image_file):
-    """Your original visual analysis framework pipeline."""
-    try:
-        if voice_groq_client is None:
-            return "Vision Framework Error: Groq API missing."
-        
-        image = Image.open(image_file)
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-            
-        buffered = BytesIO()
-        image.save(buffered, format="JPEG", quality=85)
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-        # FIXED: Formatted correctly to avoid the bad request 400 error message validation crash
-        content_payload = [
-            {"type": "text", "text": str(prompt)},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-            }
-        ]
-        
-        completion = voice_groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": content_payload}]
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return f"Image Parsing Analysis Failed: {str(e)}"
-
+# Voice Helpers
 def local_transcribe_audio(audio_file_buffer):
-    """Your original microphone audio transcriber."""
     try:
-        if not audio_file_buffer or voice_groq_client is None:
-            return "Audio Error: Empty buffer."
+        if not audio_file_buffer or groq_client is None:
+            return "Audio Error: Groq client not initialized or empty buffer."
         audio_file_buffer.name = "input_audio.wav"
-        transcription = voice_groq_client.audio.transcriptions.create(
+        transcription = groq_client.audio.transcriptions.create(
             file=audio_file_buffer,
             model="whisper-large-v3",
             response_format="text"
         )
         return transcription
     except Exception as e:
-        return f"Speech Transcription Issue: {str(e)}"
+        return f"Audio Transcription Error: {str(e)}"
 
 def local_text_to_speech_stream(text_content):
-    """Your original dynamic text-to-speech engine."""
     try:
         tts = gTTS(text=text_content, lang='en', slow=False)
         audio_buffer = BytesIO()
@@ -456,165 +517,184 @@ def local_text_to_speech_stream(text_content):
     except Exception as e:
         return None
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="Advanced AI Assistant",
-    layout="wide"
-)
+# Vision Helper
+def get_image_response(user_input, uploaded_image_file):
+    try:
+        if not groq_client: return "API configuration missing."
+        image_bytes = uploaded_image_file.getvalue()
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+        
+        file_extension = uploaded_image_file.name.split(".")[-1].lower()
+        mime_type = f"image/{file_extension}"
+        if file_extension == "jpg": mime_type = "image/jpeg"
 
-# ---------------- SESSION STATES ----------------
-init_states = {
-    "logged_in": False,
-    "user_name": "",
-    "user_email": "",
-    "user_picture": "",
-    "messages": [],
-    "chat_count": 1,
-    "current_session_id": str(uuid.uuid4()),
-    "token": None
-}
+        response = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_input},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            temperature=0.2,
+            max_tokens=1024
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Vision Analytics Error: {str(e)}"
 
-for key, value in init_states.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
+# ========================================================
+# 3. AUTHENTICATION & LOGIN GATE PHASE
+# ========================================================
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user_email' not in st.session_state:
+    st.session_state.user_email = ""
 
-# ---------------- ORIGINAL LOGIN WORKFLOW ----------------
+# Display Login Screen if user is not verified yet
 if not st.session_state.logged_in:
-    st.title("🔐 Login to AI Workspace")
-    st.write("Please authenticate with your account to unlock the agent workspace dashboard.")
-    
-    # Official library button component
-    result = oauth2.authorize_button(
-        name="Continue with Google",
-        icon="https://www.google.com.tw/favicon.ico",
-        redirect_uri=REDIRECT_URI,
-        scope="openid email profile",
-        use_container_width=True
+    st.markdown(
+        """
+        <div class="login-container">
+            <h1 style="color: #6366f1; margin-bottom: 10px;">🔒 Workspace Portal</h1>
+            <p style="color: #94a3b8; margin-bottom: 30px;">Sign in with your verified profile to unlock agent workspaces</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
     )
     
-    if result and "token" in result:
-        st.session_state.token = result["token"]
-        st.session_state.logged_in = True
+    # Render interactive portal fields centered nicely
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        input_email = st.text_input("User Access Email Address", placeholder="name@domain.com")
+        input_password = st.text_input("Access Security Key / Password", type="password")
         
-        # Decode user meta values from identity signatures
-        id_token = result["token"]["id_token"]
-        decoded = jwt.decode(id_token, options={"verify_signature": False})
-        
-        st.session_state.user_email = decoded.get("email", "")
-        st.session_state.user_name = decoded.get("name", "AI User")
-        st.session_state.user_picture = decoded.get("picture", "https://www.w3schools.com/howto/img_avatar.png")
+        if st.button("🚀 Authorize Session Connection", use_container_width=True):
+            if input_email and len(input_password) >= 4:
+                st.session_state.logged_in = True
+                st.session_state.user_email = input_email
+                st.session_state.current_session_id = str(uuid4())
+                st.rerun()
+            else:
+                st.error("Invalid Credentials. Please ensure password length requirements are satisfied.")
+    st.stop() # Prevents non-authenticated users from loading background dashboards
+
+# ========================================================
+# 4. APP DASHBOARD LAYOUT (POST-AUTHENTICATION ONLY)
+# ========================================================
+with st.sidebar:
+    st.markdown("<h2 style='text-align: center; color: #6366f1;'>🚀 AI Studio</h2>", unsafe_allow_html=True)
+    st.write(f"👤 **Session:** `{st.session_state.user_email}`")
+    st.divider()
+    
+    section = st.radio(
+        "Navigate Dashboard Modules",
+        ["Core Text Chat", "History Log", "Voice Chat", "Photo Chat"]
+    )
+    
+    st.divider()
+    if st.button("➕ Start Fresh Session", use_container_width=True):
+        st.session_state.current_session_id = str(uuid4())
+        st.success("New interaction token created!")
+    
+    if st.button("🚪 Terminate Session / Logout", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
         st.rerun()
 
-# ---------------- MAIN APPLICATION ----------------
-if st.session_state.logged_in:
+# ========================================================
+# 5. MODULE APP ROUTING
+# ========================================================
 
-    top1, top2 = st.columns([1, 6])
-    with top1:
-        st.image(st.session_state.user_picture, width=70)
-    with top2:
-        st.markdown(f"## Welcome back, {st.session_state.user_name}")
-        st.write(st.session_state.user_email)
-    st.divider()
-
-    with st.sidebar:
-        if st.button("➕ New Chat Session", use_container_width=True):
-            st.session_state.current_session_id = str(uuid.uuid4())
-            st.session_state.messages = []
-            st.session_state.chat_count += 1
-            st.rerun()
-
-        st.success(f"Active Session: Chat #{st.session_state.chat_count}")
-        st.divider()
-
-        section = st.radio(
-            "Navigation Engine Workspace",
-            ["Chat", "Voice Chat", "Photo Chat", "PDF Chat"]
-        )
-        st.divider()
-
-        if st.button("Logout", use_container_width=True):
-            for key in init_states.keys():
-                st.session_state[key] = init_states[key]
-            st.session_state.current_session_id = str(uuid.uuid4())
-            st.rerun()
-
-    # FEATURE 1: CORE CHAT
-    if section == "Chat":
-        st.title("💬 AI Chat Hub")
+# FEATURE 1: CORE TEXT CHAT
+if section == "Core Text Chat":
+    st.markdown("<h1>💬 <span style='color: #6366f1;'>AI Core</span> Chat Hub</h1>", unsafe_allow_html=True)
+    chat_prompt = st.text_input("Converse with the foundational knowledge model")
+    
+    if chat_prompt:
+        with st.spinner("Thinking..."):
+            text_reply = get_response(chat_prompt)
         
-        if not st.session_state.messages:
-            st.session_state.messages = []
+        create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Chat: {chat_prompt[:15]}...")
+        save_message(st.session_state.current_session_id, "user", chat_prompt)
+        save_message(st.session_state.current_session_id, "assistant", text_reply)
+        
+        st.write("### AI Response")
+        st.write(text_reply)
 
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+# FEATURE 2: HISTORICAL MESSAGE VIEWER
+elif section == "History Log":
+    st.markdown("<h1>🕘 <span style='color: #94a3b8;'>Saved Chat</span> Logs</h1>", unsafe_allow_html=True)
+    user_history = get_user_sessions(st.session_state.user_email)
 
-        prompt = st.chat_input("Message your AI Assistant panel...")
-        if prompt:
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+    if user_history:
+        for row in user_history:
+            with st.expander(f"📁 {row['title']} — ({row['created_at'][:10]})"):
+                history_messages = get_session_messages(row['session_id'])
+                for msg in history_messages:
+                    if msg['role'] == "user":
+                        st.markdown(f"👤 **User:** {msg['content']}")
+                    else:
+                        st.markdown("🤖 **Assistant:**")
+                        st.write(msg['content'])
+                    st.divider()
+    else:
+        st.info("No saved chat database tracks found linked to this profile context.")
 
-            with st.spinner("Processing generation parameters..."):
-                response = get_response(prompt)
+# FEATURE 3: VOICE CALL CHAT (SPEECH-TO-SPEECH LOOP)
+elif section == "Voice Chat":
+    st.markdown("<h1>🎤 <span style='color: #10b981;'>Voice Call</span> Assistant</h1>", unsafe_allow_html=True)
+    st.write("Talk hands-free! Record your question, and the assistant will speak its answer out loud.")
+    
+    audio_file = st.audio_input("🎤 Press the microphone icon to speak...", key="voice_call_input")
 
-            with st.chat_message("assistant"):
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-
-    # FEATURE 2: VOICE CHAT
-    elif section == "Voice Chat":
-        st.title("🎤 Voice Call Assistant")
-        audio_file = st.audio_input("🎤 Press microphone to speak...", key="voice_call_input")
-
-        if audio_file:
-            with st.spinner("Transcribing vocal tracks..."):
-                user_speech_text = local_transcribe_audio(audio_file)
+    if audio_file:
+        with st.spinner("Processing your voice..."):
+            user_speech_text = local_transcribe_audio(audio_file)
+        
+        if user_speech_text and not user_speech_text.startswith("Audio Transcription Error:") and not user_speech_text.startswith("Audio Error:"):
+            st.success(f"🗣️ **You Said:** {user_speech_text}")
             
-            if user_speech_text and not str(user_speech_text).startswith("Audio"):
-                st.success(f"🗣️ **You Said:** {user_speech_text}")
-                
-                with st.spinner("Searching and forming response..."):
-                    ai_voice_response = get_response(user_speech_text)
-                
-                with st.spinner("Generating audio streaming..."):
-                    reply_audio_bytes = local_text_to_speech_stream(ai_voice_response)
+            with st.spinner("Thinking..."):
+                ai_voice_response = get_response(user_speech_text)
+            
+            with st.spinner("Speaking reply..."):
+                reply_audio_bytes = local_text_to_speech_stream(ai_voice_response)
+            
+            create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Voice: {user_speech_text[:15]}...")
+            save_message(st.session_state.current_session_id, "user", user_speech_text)
+            save_message(st.session_state.current_session_id, "assistant", ai_voice_response)
 
-                st.markdown("### 🤖 Assistant Reply")
-                st.info(ai_voice_response)
-                
-                if reply_audio_bytes:
-                    st.audio(reply_audio_bytes, format="audio/mp3", autoplay=True)
+            st.markdown("### 🤖 Assistant Reply")
+            st.info(ai_voice_response)
+            
+            if reply_audio_bytes:
+                st.audio(reply_audio_bytes, format="audio/mp3", autoplay=True)
+        else:
+            st.error("Could not process speech. Please clear the recording widget asset and try again.")
 
-    # FEATURE 3: PHOTO CHAT
-    elif section == "Photo Chat":
-        st.title("🖼 AI Multimodal Photo Chat")
-        uploaded_image = st.file_uploader("Drop image source parameters here", type=["png", "jpg", "jpeg"])
-        image_prompt = st.text_input("Ask detail analytics regarding this image context")
+# FEATURE 4: PHOTO CHAT (VISION MODEL INTERACTION)
+elif section == "Photo Chat":
+    st.markdown("<h1>🖼️ <span style='color: #f59e0b;'>Vision</span> Analytics</h1>", unsafe_allow_html=True)
+    uploaded_image = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
+    image_prompt = st.text_input("Ask something about this image")
 
-        if uploaded_image:
-            st.image(uploaded_image, use_container_width=True)
+    if uploaded_image:
+        st.image(uploaded_image, use_container_width=True)
 
-            if image_prompt:
-                with st.spinner("Analyzing pixel matrices..."):
-                    response = get_image_response(image_prompt, uploaded_image)
-                
-                st.write("### AI Analysis Response")
-                st.write(response)
+        if image_prompt:
+            with st.spinner("Analyzing image pixels..."):
+                vision_response = get_image_response(image_prompt, uploaded_image)
+            
+            clean_prompt = str(image_prompt).strip()
+            clean_response = str(vision_response).strip()
 
-    # FEATURE 4: PDF CHAT
-    elif section == "PDF Chat":
-        st.title("📄 PDF Document Context Chat")
-        uploaded_pdf = st.file_uploader("Upload reference context PDF document setup", type=["pdf"])
+            create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Photo: {uploaded_image.name[:12]}...")
+            save_message(st.session_state.current_session_id, "user", clean_prompt)
+            save_message(st.session_state.current_session_id, "assistant", clean_response)
 
-        if uploaded_pdf:
-            if st.button("Process Document Tokens", use_container_width=True):
-                st.success("Document segments mapped successfully into active context window! ✅")
-
-            question = st.text_input("Ask a contextual question based directly on the text data segments")
-            if question:
-                with st.spinner("Injecting extraction context arrays..."):
-                    answer = get_response(f"Based on your document context, parse and answer this query: {question}")
-                
-                st.write("### Answer Breakdown")
-                st.info(answer)
+            st.write("### AI Analysis")
+            st.write(vision_response)
