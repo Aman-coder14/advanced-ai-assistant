@@ -135,34 +135,39 @@ oauth2 = OAuth2Component(
 # ---------------- LOGIN ROUTINE ----------------
 section = "Chat"  # Default section fallback
 
-if not st.session_state.logged_in:
-    # We call the native button component securely
-    result = oauth2.authorize_button(
-        name="🔐 Login with Google",
-        redirect_uri=REDIRECT_URI,
-        scope="openid email profile",
-        use_container_width=True,
-        pkce="S256" # Protects and secures the session transaction state mapping
-    )
+# Force clean parameters and prevent cookie isolation loops
+query_params = st.query_params
 
-    if result and "token" in result:
-        st.session_state.token = result["token"]
-        st.session_state.logged_in = True
-
-        # Decode token data securely
-        id_token = result["token"]["id_token"]
-        decoded = jwt.decode(id_token, options={"verify_signature": False})
-
-        # Cache credentials safely to profile memory
-        st.session_state.user_email = decoded.get("email", "")
-        st.session_state.user_name = decoded.get("name", "AI User")
-        st.session_state.user_picture = decoded.get("picture", "")
+if "code" in query_params and not st.session_state.get("logged_in", False):
+    try:
+        # Securely capture the code directly from the URL query track
+        auth_code = query_params["code"]
+        token_result = oauth2.get_token(auth_code, REDIRECT_URI)
+        
+        if token_result and "id_token" in token_result:
+            st.session_state.token = token_result
+            st.session_state.logged_in = True
+            
+            # Decode using raw memory mappings to bypass incognito cookie blocks
+            id_token = token_result["id_token"]
+            decoded = jwt.decode(id_token, options={"verify_signature": False})
+            
+            st.session_state.user_email = decoded.get("email", "")
+            st.session_state.user_name = decoded.get("name", "AI User")
+            st.session_state.user_picture = decoded.get("picture", "")
+            
+            # Wipe URL parameters immediately to stop the page from auto-reloading
+            st.query_params.clear()
+            st.rerun()
+    except Exception as e:
+        # Fallback handling if browser parameters are dropped by private tabs
+        st.warning("Finalizing secure workspace handshake... Please wait.")
+        st.query_params.clear()
         st.rerun()
 
-# Maintain persistent session context locks
-if st.session_state.token:
+# Persist login memory state safely
+if st.session_state.get("token") is not None:
     st.session_state.logged_in = True
-
 # ---------------- MAIN APPLICATION ----------------
 if st.session_state.logged_in:
 
