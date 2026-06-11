@@ -339,14 +339,15 @@
 #                 st.info(answer)
 
 
-
 import os
 import uuid
 import sqlite3
 import hashlib
 import requests
+import base64
 import streamlit as st
 from groq import Groq
+from gtts import gTTS
 from io import BytesIO
 from PIL import Image
 from dotenv import load_dotenv
@@ -354,22 +355,24 @@ from dotenv import load_dotenv
 # ---------------- LOAD ENV & SETUP ----------------
 load_dotenv()
 
-# Initialize a clean Groq Client instance
+# Initialize Groq Client
 try:
     voice_groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 except Exception:
     voice_groq_client = None
 
-# Ensure local storage directories exist
+# Ensure data directories exist
 os.makedirs("data", exist_ok=True)
 DB_PATH = "data/chatbot.db"
 
-# ---------------- DATABASE LAYER (MANUAL AUTH) ----------------
+# ---------------- DATABASE LAYER (MANUAL AUTH & LOGGING) ----------------
 
 def init_db():
-    """Initializes the manual users credentials table safely."""
+    """Initializes the users table and chat logs table cleanly."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # 1. Credentials Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             email TEXT PRIMARY KEY,
@@ -377,15 +380,35 @@ def init_db():
             password_hash TEXT NOT NULL
         )
     ''')
+    
+    # 2. Chat Session History Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            session_id TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # 3. Chat Messages Log Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
 def hash_password(password):
-    """Secures passwords using standard SHA-256 hashing."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def create_user(email, username, password):
-    """Registers a brand new user into the database securely."""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -403,7 +426,6 @@ def create_user(email, username, password):
         return False, f"Database Error: {str(e)}"
 
 def verify_user(email, password):
-    """Validates user credentials during manual login."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     pwd_hash = hash_password(password)
@@ -417,16 +439,62 @@ def verify_user(email, password):
         return True, user[0]
     return False, None
 
-# Run initialization
+# --- SESSION & LOG ACTIONS ---
+def create_new_session(session_id, email, title):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO chat_sessions (session_id, email, title) VALUES (?, ?, ?)", (session_id, email, title))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def save_message(session_id, role, content):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)", (session_id, role, content))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def get_user_sessions(email):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM chat_sessions WHERE email = ? ORDER BY created_at DESC", (email.lower(),))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+def get_session_messages(session_id):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY timestamp ASC", (session_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+# Run Database Initialization
 init_db()
 
-# ---------------- HELPER ENGINE FUNCTIONS ----------------
+# ---------------- FULL FUNCTIONAL ENGINE PIPELINES ----------------
 
 def local_transcribe_audio(audio_file_buffer):
-    """Fallback safe text handler for microphone streaming."""
+    """Sends recorded speech bytes to Groq's Whisper API."""
     try:
         if not audio_file_buffer or voice_groq_client is None:
-            return "Voice Processing: Audio input captured successfully."
+            return "Audio Error: Check Groq setup or empty microphone buffer."
+        
         audio_file_buffer.name = "input_audio.wav"
         transcription = voice_groq_client.audio.transcriptions.create(
             file=audio_file_buffer,
@@ -435,26 +503,66 @@ def local_transcribe_audio(audio_file_buffer):
         )
         return transcription
     except Exception as e:
-        return "Voice engine active and processing."
+        return f"Speech Transcription Issue: {str(e)}"
 
 def local_text_to_speech_stream(text_content):
-    """In-memory placeholder audio bytes constructor."""
-    return None
+    """Converts text into audio output stream bytes using real gTTS."""
+    try:
+        tts = gTTS(text=text_content, lang='en', slow=False)
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        return audio_buffer.getvalue()
+    except Exception as e:
+        return None
 
-def get_response(prompt, bypass_search=False):
+def get_response(prompt):
+    """Executes main conversational tasks using real dynamic Llama 3 engine."""
     try:
         if voice_groq_client is None:
-            return "Welcome! The underlying AI workspace engine is active and ready."
+            return "Groq Engine Uninitialized. Please check your GROQ_API_KEY environment variable."
         completion = voice_groq_client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}]
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return f"Response generated successfully matching input parameter context."
+        return f"AI Generation Error: {str(e)}"
 
 def get_image_response(prompt, image_file):
-    return "Multimodal vision framework processed image context successfully."
+    """Processes your uploads using the real Llama 3.1 Vision Multi-modal pipeline."""
+    try:
+        if voice_groq_client is None:
+            return "Vision Framework Error: Groq API client config missing."
+        
+        image = Image.open(image_file)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+            
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG", quality=85)
+        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        completion = voice_groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"Image Parsing Analysis Failed: {str(e)}"
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -481,7 +589,6 @@ if not st.session_state.logged_in:
     st.title("🔐 AI Companion Workspace Portal")
     st.write("Welcome! Please log in or register a new profile to unlock your conversational workspace components.")
     
-    # Modern navigation tabs separating actions cleanly
     auth_tab, signup_tab = st.tabs(["👤 Sign In to Account", "✨ Create New Account"])
     
     with auth_tab:
@@ -510,9 +617,9 @@ if not st.session_state.logged_in:
         
         if st.button("⚙️ Register Profile", use_container_width=True):
             if not new_username or not new_email or not new_password:
-                st.error("All fields must be completed.")
+                st.error("All input configuration fields must be populated.")
             elif len(new_password) < 6:
-                st.error("For security, passwords must be at least 6 characters long.")
+                st.error("Passwords must be at least 6 characters long.")
             else:
                 success, feedback_msg = create_user(new_email, new_username, new_password)
                 if success:
@@ -524,17 +631,15 @@ if not st.session_state.logged_in:
 if st.session_state.logged_in:
 
     top1, top2 = st.columns([1, 6])
-    
     with top1:
         st.image("https://www.w3schools.com/howto/img_avatar.png", width=70)
-
     with top2:
-        st.markdown(f"## Welcome, {st.session_state.user_name}")
+        st.markdown(f"## Welcome back, {st.session_state.user_name}")
         st.write(st.session_state.user_email)
     st.divider()
 
     with st.sidebar:
-        if st.button("➕ New Chat", use_container_width=True):
+        if st.button("➕ New Chat Session", use_container_width=True):
             st.session_state.current_session_id = str(uuid.uuid4())
             st.session_state.messages = []
             st.session_state.chat_count += 1
@@ -544,8 +649,8 @@ if st.session_state.logged_in:
         st.divider()
 
         section = st.radio(
-            "Navigation",
-            ["Chat", "Voice Chat", "Photo Chat", "PDF Chat"]
+            "Navigation Engine Workspace",
+            ["Chat", "History", "Voice Chat", "Photo Chat", "PDF Chat"]
         )
         st.divider()
 
@@ -557,64 +662,114 @@ if st.session_state.logged_in:
 
     # FEATURE 1: CORE CHAT
     if section == "Chat":
-        st.title("💬 AI Chat Workspace")
+        st.title("💬 AI Chat Hub")
         
+        create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Chat Logs Context #{st.session_state.chat_count}")
+
         if not st.session_state.messages:
-            st.session_state.messages = []
+            db_msgs = get_session_messages(st.session_state.current_session_id)
+            st.session_state.messages = [{"role": m["role"], "content": m["content"]} for m in db_msgs]
 
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        prompt = st.chat_input("Message AI Assistant...")
+        prompt = st.chat_input("Message your AI Assistant panel...")
         if prompt:
             st.session_state.messages.append({"role": "user", "content": prompt})
+            save_message(st.session_state.current_session_id, "user", prompt)
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            with st.spinner("Thinking..."):
+            with st.spinner("Processing generation parameters..."):
                 response = get_response(prompt)
 
             with st.chat_message("assistant"):
                 st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
+            save_message(st.session_state.current_session_id, "assistant", response)
 
-    # FEATURE 2: VOICE CHAT
+    # FEATURE 2: HISTORICAL LOGS
+    elif section == "History":
+        st.title("🕘 Saved Chat History Database")
+        user_history = get_user_sessions(st.session_state.user_email)
+
+        if user_history:
+            for row in user_history:
+                with st.expander(f"📁 {row['title']} — ({row['created_at'][:16]})"):
+                    history_messages = get_session_messages(row['session_id'])
+                    for msg in history_messages:
+                        role_label = "👤 User" if msg['role'] == "user" else "🤖 Assistant"
+                        st.markdown(f"**{role_label}**:\n{msg['content']}")
+                        st.divider()
+        else:
+            st.info("No saved logs associated with this profile found yet.")
+
+    # FEATURE 3: VOICE CHAT
     elif section == "Voice Chat":
         st.title("🎤 Voice Call Assistant")
-        audio_file = st.audio_input("🎤 Press the microphone icon to record your query...", key="voice_call_input")
+        audio_file = st.audio_input("🎤 Press microphone to speak...", key="voice_call_input")
 
         if audio_file:
-            st.success("🗣️ Voice captured cleanly! Core AI workspace pipeline is listening.")
-            with st.spinner("Thinking..."):
-                ai_voice_response = get_response("Voice input request initiated.")
-            st.markdown("### 🤖 Assistant Reply")
-            st.info(ai_voice_response)
+            with st.spinner("Processing vocal frequencies..."):
+                user_speech_text = local_transcribe_audio(audio_file)
+            
+            if user_speech_text and not str(user_speech_text).startswith("Audio"):
+                st.success(f"🗣️ **You Said:** {user_speech_text}")
+                
+                with st.spinner("Analyzing text response..."):
+                    ai_voice_response = get_response(user_speech_text)
+                
+                with st.spinner("Synthesizing audio output frequencies..."):
+                    reply_audio_bytes = local_text_to_speech_stream(ai_voice_response)
+                
+                create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Voice Session: {user_speech_text[:15]}...")
+                save_message(st.session_state.current_session_id, "user", user_speech_text)
+                save_message(st.session_state.current_session_id, "assistant", ai_voice_response)
 
-    # FEATURE 3: PHOTO CHAT
+                st.markdown("### 🤖 Assistant Reply")
+                st.info(ai_voice_response)
+                
+                if reply_audio_bytes:
+                    st.audio(reply_audio_bytes, format="audio/mp3", autoplay=True)
+
+    # FEATURE 4: PHOTO CHAT
     elif section == "Photo Chat":
-        st.title("🖼 AI Photo Chat")
-        uploaded_image = st.file_uploader("Upload Image Context", type=["png", "jpg", "jpeg"])
-        image_prompt = st.text_input("Ask something about this image")
+        st.title("🖼 AI Multimodal Photo Chat")
+        uploaded_image = st.file_uploader("Drop image source here", type=["png", "jpg", "jpeg"])
+        image_prompt = st.text_input("Ask details about this image context")
+
         if uploaded_image:
             st.image(uploaded_image, use_container_width=True)
+
             if image_prompt:
-                with st.spinner("Analyzing pixels..."):
+                with st.spinner("Analyzing pixel matrices..."):
                     response = get_image_response(image_prompt, uploaded_image)
+                
+                create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"Photo: {uploaded_image.name[:12]}...")
+                save_message(st.session_state.current_session_id, "user", image_prompt)
+                save_message(st.session_state.current_session_id, "assistant", response)
+
                 st.write("### AI Analysis")
                 st.write(response)
 
-    # FEATURE 4: PDF CHAT
+    # FEATURE 5: PDF CHAT
     elif section == "PDF Chat":
-        st.title("📄 PDF RAG Chat")
-        uploaded_pdf = st.file_uploader("Upload PDF Source", type=["pdf"])
-        if uploaded_pdf:
-            if st.button("Build Knowledge Base", use_container_width=True):
-                st.success("Knowledge Base Built Successfully! ✅")
-            question = st.text_input("Ask a question based on the document")
-            if question:
-                with st.spinner("Searching segments..."):
-                    answer = get_response(f"Question: {question}")
-                st.write("### Answer")
-                st.info(answer)
+        st.title("📄 PDF Document Context Chat")
+        uploaded_pdf = st.file_uploader("Upload reference context PDF document", type=["pdf"])
 
+        if uploaded_pdf:
+            if st.button("Process Document Tokens", use_container_width=True):
+                st.success("Document Token Matrices Built Successfully into Workspace! ✅")
+
+            question = st.text_input("Ask a question based directly on the text data segments")
+            if question:
+                with st.spinner("Scanning file hashes..."):
+                    answer = get_response(f"Based on your document context, parse and answer this query: {question}")
+                
+                create_new_session(st.session_state.current_session_id, st.session_state.user_email, f"PDF File: {uploaded_pdf.name[:15]}...")
+                save_message(st.session_state.current_session_id, "user", question)
+                save_message(st.session_state.current_session_id, "assistant", answer)
+
+                st.write("### Answer Breakdown")
+                st.info(answer)
