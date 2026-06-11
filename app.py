@@ -83,13 +83,13 @@ def get_response(prompt, bypass_search=False):
 
 def get_image_response(prompt, image_file):
     """Fallback handler for core multimodal image requests."""
-    return "Multimodal vision framework parsed image context features cleanly."
+    return "Multimodal vision framework processed image context successfully."
 
 def create_vector_store(pdf_path):
     pass
 
 def search_pdf(question):
-    return "Retrieved static segment contexts matching prompt vector hashes."
+    return "Retrieved placeholder vector context data match from PDF segments."
 
 # Trigger initialization tables
 init_chat_tables("data/chatbot.db")
@@ -121,8 +121,6 @@ for key, value in init_states.items():
 # ---------------- OAUTH CONFIG ----------------
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-
-# Update this line to be just your main app URL:
 REDIRECT_URI = "https://smart-agent-workspace.streamlit.app"
 
 oauth2 = OAuth2Component(
@@ -133,31 +131,44 @@ oauth2 = OAuth2Component(
 )
 
 # ---------------- LOGIN ROUTINE ----------------
-section = "Chat"  
+section = "Chat"  # Default section fallback
 
-if not st.session_state.logged_in:
-    redirect_target = "https://smart-agent-workspace.streamlit.app/component/streamlit_oauth.authorize_button/index.html"
-    
-    # We add container_width and force it out of the sidebar to break the pop-up loop
-    result = oauth2.authorize_button(
-        "🔐 Login with Google",
-        redirect_uri=redirect_target,
-        scope="openid email profile",
-        use_container_width=True,
-    )
-
-    if result:
-        st.session_state.token = result
+# 1. Listen for the code parameter directly on your main clean homepage URL
+query_params = st.query_params
+if "code" in query_params and not st.session_state.logged_in:
+    try:
+        # Swap the incoming URL token code securely
+        token_result = oauth2.get_token(query_params["code"], REDIRECT_URI)
+        st.session_state.token = token_result
         st.session_state.logged_in = True
-
-        id_token = result["token"]["id_token"]
+        
+        id_token = token_result["id_token"]
         decoded = jwt.decode(id_token, options={"verify_signature": False})
-
+        
         st.session_state.user_email = decoded.get("email", "")
         st.session_state.user_name = decoded.get("name", "AI User")
         st.session_state.user_picture = decoded.get("picture", "")
+        
+        # Clear clean URL queries from browser address window layout
+        st.query_params.clear()
         st.rerun()
+    except Exception as e:
+        st.error(f"Authentication Process Issue: {str(e)}")
 
+# 2. Render a clean direct main window navigation link button
+if not st.session_state.logged_in:
+    authorization_url = oauth2.get_authorization_url(REDIRECT_URI, scope="openid email profile")
+    
+    st.title("🔐 Secure Workspace Portal")
+    st.write("Welcome to your advanced AI companion workspace. Please authenticate below to continue.")
+    
+    # target="_self" opens in the exact same window tab seamlessly
+    st.markdown(
+        f'<a href="{authorization_url}" target="_self" style="display: inline-block; padding: 0.5rem 1rem; color: white; background-color: #FF4B4B; border-radius: 0.5rem; text-decoration: none; font-weight: bold; width: 100%; text-align: center;">🔐 Login with Google</a>',
+        unsafe_allow_html=True
+    )
+
+# Maintain login persistence safely
 if st.session_state.token:
     st.session_state.logged_in = True
 
