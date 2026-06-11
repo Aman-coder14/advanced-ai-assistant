@@ -133,13 +133,14 @@ oauth2 = OAuth2Component(
 section = "Chat"  
 
 if not st.session_state.logged_in:
-    # Forced production URL endpoint to completely avoid the loop
     redirect_target = "https://smart-agent-workspace.streamlit.app/component/streamlit_oauth.authorize_button/index.html"
     
+    # We add container_width and force it out of the sidebar to break the pop-up loop
     result = oauth2.authorize_button(
         "🔐 Login with Google",
         redirect_uri=redirect_target,
         scope="openid email profile",
+        use_container_width=True,
     )
 
     if result:
