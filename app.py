@@ -121,53 +121,45 @@ for key, value in init_states.items():
 # ---------------- OAUTH CONFIG ----------------
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-REDIRECT_URI = "https://smart-agent-workspace.streamlit.app"
+
+# The native library component requires the full endpoint url string matching your URIs 1 row
+REDIRECT_URI = "https://smart-agent-workspace.streamlit.app/component/streamlit_oauth.authorize_button/index.html"
 
 oauth2 = OAuth2Component(
     CLIENT_ID,
     CLIENT_SECRET,
-    "https://accounts.google.com/o/oauth2/auth",
+    "https://accounts.google.com/o/oauth2/v2/auth",
     "https://oauth2.googleapis.com/token",
 )
 
 # ---------------- LOGIN ROUTINE ----------------
 section = "Chat"  # Default section fallback
 
-# 1. Listen for the code parameter directly on your main clean homepage URL
-query_params = st.query_params
-if "code" in query_params and not st.session_state.logged_in:
-    try:
-        # Swap the incoming URL token code securely using library's native method
-        token_result = oauth2.get_token(query_params["code"], REDIRECT_URI)
-        st.session_state.token = token_result
+if not st.session_state.logged_in:
+    # We call the native button component securely
+    result = oauth2.authorize_button(
+        name="🔐 Login with Google",
+        redirect_uri=REDIRECT_URI,
+        scope="openid email profile",
+        use_container_width=True,
+        pkce="S256" # Protects and secures the session transaction state mapping
+    )
+
+    if result and "token" in result:
+        st.session_state.token = result["token"]
         st.session_state.logged_in = True
-        
-        id_token = token_result["id_token"]
+
+        # Decode token data securely
+        id_token = result["token"]["id_token"]
         decoded = jwt.decode(id_token, options={"verify_signature": False})
-        
+
+        # Cache credentials safely to profile memory
         st.session_state.user_email = decoded.get("email", "")
         st.session_state.user_name = decoded.get("name", "AI User")
         st.session_state.user_picture = decoded.get("picture", "")
-        
-        st.query_params.clear()
         st.rerun()
-    except Exception as e:
-        st.error(f"Authentication Process Issue: {str(e)}")
 
-# 2. Render the authorization button using the correct native method
-if not st.session_state.logged_in:
-    # Changed to the correct method: get_authorize_url
-    authorization_url = oauth2.get_authorize_url(redirect_uri=REDIRECT_URI, scope="openid email profile")
-    
-    st.title("🔐 Secure Workspace Portal")
-    st.write("Welcome to your advanced AI companion workspace. Please authenticate below to continue.")
-    
-    st.markdown(
-        f'<a href="{authorization_url}" target="_self" style="display: inline-block; padding: 0.5rem 1rem; color: white; background-color: #FF4B4B; border-radius: 0.5rem; text-decoration: none; font-weight: bold; width: 100%; text-align: center;">🔐 Login with Google</a>',
-        unsafe_allow_html=True
-    )
-
-# Maintain login persistence safely
+# Maintain persistent session context locks
 if st.session_state.token:
     st.session_state.logged_in = True
 
