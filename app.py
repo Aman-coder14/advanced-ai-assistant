@@ -535,30 +535,41 @@ def get_image_response(prompt, image_file):
         if voice_groq_client is None:
             return "Vision Framework Error: Groq API client config missing."
         
+        # 1. Open and prepare the image file cleanly
         image = Image.open(image_file)
         if image.mode != "RGB":
             image = image.convert("RGB")
             
+        # 2. Convert image bytes directly to a clean Base64 string payload
         buffered = BytesIO()
         image.save(buffered, format="JPEG", quality=85)
         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
+        # 3. Structure the message content explicitly for Groq's Vision requirements
+        content_payload = [
+            {
+                "type": "text", 
+                "text": str(prompt)
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            }
+        ]
+        
+        # 4. Dispatch the call to the multi-modal vision gateway
         completion = voice_groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
+                    "content": content_payload
                 }
-            ]
+            ],
+            temperature=0.2,
+            max_tokens=1024
         )
         return completion.choices[0].message.content
     except Exception as e:
