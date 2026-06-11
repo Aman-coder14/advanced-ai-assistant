@@ -1,7 +1,6 @@
 import time
 import streamlit as st
 
-
 def stream_text(text):
 
     placeholder = st.empty()
@@ -14,4 +13,4 @@ def stream_text(text):
 
         placeholder.markdown(output)
 
-        time.sleep(0.05)
+        time.sleep(0.03)
