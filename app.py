@@ -137,7 +137,7 @@ section = "Chat"  # Default section fallback
 query_params = st.query_params
 if "code" in query_params and not st.session_state.logged_in:
     try:
-        # Swap the incoming URL token code securely
+        # Swap the incoming URL token code securely using library's native method
         token_result = oauth2.get_token(query_params["code"], REDIRECT_URI)
         st.session_state.token = token_result
         st.session_state.logged_in = True
@@ -149,20 +149,19 @@ if "code" in query_params and not st.session_state.logged_in:
         st.session_state.user_name = decoded.get("name", "AI User")
         st.session_state.user_picture = decoded.get("picture", "")
         
-        # Clear clean URL queries from browser address window layout
         st.query_params.clear()
         st.rerun()
     except Exception as e:
         st.error(f"Authentication Process Issue: {str(e)}")
 
-# 2. Render a clean direct main window navigation link button
+# 2. Render the authorization button using the correct native method
 if not st.session_state.logged_in:
-    authorization_url = oauth2.get_authorization_url(REDIRECT_URI, scope="openid email profile")
+    # Changed to the correct method: get_authorize_url
+    authorization_url = oauth2.get_authorize_url(redirect_uri=REDIRECT_URI, scope="openid email profile")
     
     st.title("🔐 Secure Workspace Portal")
     st.write("Welcome to your advanced AI companion workspace. Please authenticate below to continue.")
     
-    # target="_self" opens in the exact same window tab seamlessly
     st.markdown(
         f'<a href="{authorization_url}" target="_self" style="display: inline-block; padding: 0.5rem 1rem; color: white; background-color: #FF4B4B; border-radius: 0.5rem; text-decoration: none; font-weight: bold; width: 100%; text-align: center;">🔐 Login with Google</a>',
         unsafe_allow_html=True
