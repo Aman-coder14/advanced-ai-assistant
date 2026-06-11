@@ -483,11 +483,11 @@ def local_text_to_speech_stream(text_content):
         return None
 # ========================================================
 #from chatbot.llm import get_response, get_image_response
-486 import os
-487 #import jwt 
-488 import uuid
-489 import requests
-490 import PyPDF2
+ import os
+ #import jwt 
+ import uuid
+ import requests
+ import PyPDF2
 import streamlit as st
 from PIL import Image
 from io import BytesIO
