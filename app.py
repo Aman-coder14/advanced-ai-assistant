@@ -254,8 +254,9 @@ if st.session_state.logged_in:
 
     st.title("🎤 Voice Assistant")
 
-    st.info("Voice Chat is temporarily unavailable on cloud deployment.")
-
+    st.info(
+        "Voice Chat is temporarily unavailable on cloud deployment."
+    )
     # FEATURE 3: PHOTO CHAT
     elif section == "Photo Chat":
         st.title("🖼 AI Multimodal Photo Chat")
