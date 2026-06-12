@@ -41,8 +41,7 @@ oauth2 = OAuth2Component(
     CLIENT_SECRET,
     "https://accounts.google.com/o/oauth2/v2/auth",
     "https://oauth2.googleapis.com/token",
-    "https://oauth2.googleapis.com/token",
-    "https://oauth2.googleapis.com/revoke"
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke"
 )
 
 # ---------------- CORE ENGINE FUNCTIONAL PIPELINES ----------------
