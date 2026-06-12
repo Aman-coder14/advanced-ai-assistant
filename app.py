@@ -250,29 +250,11 @@ if st.session_state.logged_in:
                 st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
-    # FEATURE 2: VOICE CHAT
     elif section == "Voice Chat":
-        st.title("🎤 Voice Call Assistant")
-        audio_file = st.audio_input("🎤 Press microphone to speak...", key="voice_call_input")
 
-        if audio_file:
-            with st.spinner("Transcribing vocal tracks..."):
-                user_speech_text = local_transcribe_audio(audio_file)
-            
-            if user_speech_text and not str(user_speech_text).startswith("Audio"):
-                st.success(f"🗣️ **You Said:** {user_speech_text}")
-                
-                with st.spinner("Searching and forming response..."):
-                    ai_voice_response = get_response(user_speech_text)
-                
-                with st.spinner("Generating audio streaming..."):
-                    reply_audio_bytes = local_text_to_speech_stream(ai_voice_response)
+    st.title("🎤 Voice Assistant")
 
-                st.markdown("### 🤖 Assistant Reply")
-                st.info(ai_voice_response)
-                
-                if reply_audio_bytes:
-                    st.audio(reply_audio_bytes, format="audio/mp3", autoplay=True)
+    st.info("Voice Chat is temporarily unavailable on cloud deployment.")
 
     # FEATURE 3: PHOTO CHAT
     elif section == "Photo Chat":
