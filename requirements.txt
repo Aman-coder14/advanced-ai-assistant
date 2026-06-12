@@ -1,20 +1,12 @@
 streamlit
 groq
 python-dotenv
-pillow
+Pillow
 PyPDF2
 sqlalchemy
 bcrypt
 PyJWT
 requests
 streamlit-oauth==0.1.14
-gtts
 wikipedia==1.4.0
-
-# likely needed
-SpeechRecognition
-faiss-cpu
-langchain
-langchain-community
-langchain-text-splitters
-sentence-transformers
+gTTS
