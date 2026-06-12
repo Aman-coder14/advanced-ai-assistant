@@ -11,4 +11,3 @@ bcrypt
 PyJWT
 requests
 streamlit-oauth==0.1.14
-httpx-oauth==0.13.3
