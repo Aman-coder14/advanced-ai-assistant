@@ -566,22 +566,37 @@ init_db()
 # ---------------- CORE PIPELINES (REAL-TIME ENABLED) ----------------
 
 def get_response(prompt):
-    """Executes completions with web search enabled to bypass knowledge cutoffs."""
+    """Executes completions with explicitly forced 2026 real-time temporal grounding."""
     try:
         if voice_groq_client is None:
             return "Groq Engine Uninitialized. Verify your GROQ_API_KEY settings."
         
-        # Switched over to groq/compound to track down up-to-date internet results
+        # We use a system message to force the model to break out of its static 2023 training data limit
+        messages = [
+            {
+                "role": "system", 
+                "content": "You are a real-time AI Assistant. The current year is 2026. "
+                           "You have active live web access. Always prioritize the newest search parameters "
+                           "and tools data provided to answer questions about current events, sports, or dates."
+            },
+            {"role": "user", "content": prompt}
+        ]
+        
+        # Switched to the compound search routing engine
         completion = voice_groq_client.chat.completions.create(
             model="groq/compound",
-            messages=[{"role": "user", "content": prompt}]
+            messages=messages
         )
         return completion.choices[0].message.content
     except Exception:
         try:
+            # Fallback grounding configuration
             fallback = voice_groq_client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[
+                    {"role": "system", "content": "Current year is 2026. Use live search data rules."},
+                    {"role": "user", "content": prompt}
+                ]
             )
             return fallback.choices[0].message.content
         except Exception as e:
