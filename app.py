@@ -252,11 +252,11 @@ if st.session_state.logged_in:
 
     elif section == "Voice Chat":
 
-    st.title("🎤 Voice Assistant")
+        st.title("🎤 Voice Assistant")
 
-    st.info(
+        st.info(
         "Voice Chat is temporarily unavailable on cloud deployment."
-    )
+        )
     # FEATURE 3: PHOTO CHAT
     elif section == "Photo Chat":
         st.title("🖼 AI Multimodal Photo Chat")
