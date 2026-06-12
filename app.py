@@ -494,6 +494,7 @@ from gtts import gTTS
 from io import BytesIO
 from PIL import Image
 from dotenv import load_dotenv
+from duckduckgo_search import DDGS  # Free, keyless live web search provider
 
 # ---------------- LOAD ENV & SETUP ----------------
 load_dotenv()
@@ -563,44 +564,70 @@ def verify_user(email, password):
 # Initialize local system database
 init_db()
 
-# ---------------- CORE PIPELINES (REAL-TIME ENABLED) ----------------
+# ---------------- LIVE WEB SEARCH METHOD ----------------
+
+def fetch_live_search_context(query: str) -> str:
+    """Queries DuckDuckGo securely to scrape real-time contextual text layers."""
+    try:
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=3)]
+            if results:
+                context_chunks = []
+                for idx, item in enumerate(results, 1):
+                    context_chunks.append(f"[{idx}] Source: {item.get('href')}\nContent: {item.get('body')}")
+                return "\n\n".join(context_chunks)
+    except Exception:
+        pass
+    return ""
+
+# ---------------- CORE PIPELINES (REAL-TIME SECURED) ----------------
 
 def get_response(prompt):
-    """Executes completions with explicitly forced 2026 real-time temporal grounding."""
+    """Executes completions injected with dynamic background web scrap snippets."""
     try:
         if voice_groq_client is None:
             return "Groq Engine Uninitialized. Verify your GROQ_API_KEY settings."
         
-        # We use a system message to force the model to break out of its static 2023 training data limit
+        # 1. Dynamically evaluate if web scraping grounding context arrays are necessary
+        search_triggers = ["2026", "ipl", "match", "today", "winner", "score", "news", "current", "who is", "weather", "latest"]
+        live_context = ""
+        
+        if any(keyword in prompt.lower() for keyword in search_triggers):
+            live_context = fetch_live_search_context(prompt)
+
+        # 2. Structure context-guided prompt payload wrapper matrix
+        system_instruction = (
+            "You are an advanced, real-time AI Workspace Assistant built on the Llama architecture.\n"
+            "CRITICAL TIMING RULE: The current calendar date year is 2026.\n"
+            "You have access to live internet search elements injected below. If live web data is provided, "
+            "prioritize it as factual truth to bypass any inner knowledge base model cutoff dates (2023)."
+        )
+        
+        user_content = prompt
+        if live_context:
+            user_content = (
+                f"--- LIVE INTERNET GROUNDING DATA (CURRENT YEAR: 2026) ---\n"
+                f"{live_context}\n"
+                f"---------------------------------------------------------\n"
+                f"Using the real-time references above, comprehensively answer the user request:\n"
+                f"User Question: {prompt}"
+            )
+
         messages = [
-            {
-                "role": "system", 
-                "content": "You are a real-time AI Assistant. The current year is 2026. "
-                           "You have active live web access. Always prioritize the newest search parameters "
-                           "and tools data provided to answer questions about current events, sports, or dates."
-            },
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_content}
         ]
         
-        # Switched to the compound search routing engine
+        # 3. Request LLM Inference
         completion = voice_groq_client.chat.completions.create(
-            model="groq/compound",
-            messages=messages
+            model="llama-3.1-8b-instant",
+            messages=messages,
+            temperature=0.3
         )
         return completion.choices[0].message.content
-    except Exception:
-        try:
-            # Fallback grounding configuration
-            fallback = voice_groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": "Current year is 2026. Use live search data rules."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return fallback.choices[0].message.content
-        except Exception as e:
-            return f"AI Generation Error: {str(e)}"
+        
+    except Exception as e:
+        return f"AI Generation Error: {str(e)}"
 
 def get_image_response(prompt, image_file):
     """Processes images safely using a dedicated vision model."""
@@ -624,7 +651,6 @@ def get_image_response(prompt, image_file):
             }
         ]
         
-        # CHANGED MODEL HERE: Switched to the official Groq vision model
         completion = voice_groq_client.chat.completions.create(
             model="llama-3.2-11b-vision-preview",
             messages=[{"role": "user", "content": content_payload}]
