@@ -588,7 +588,7 @@ def get_response(prompt):
             return f"AI Generation Error: {str(e)}"
 
 def get_image_response(prompt, image_file):
-    """Processes images safely using explicitly formatted input arrays."""
+    """Processes images safely using a dedicated vision model."""
     try:
         if voice_groq_client is None:
             return "Vision Framework Error: Groq API client connection missing."
@@ -609,8 +609,9 @@ def get_image_response(prompt, image_file):
             }
         ]
         
+        # CHANGED MODEL HERE: Switched to the official Groq vision model
         completion = voice_groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.2-11b-vision-preview",
             messages=[{"role": "user", "content": content_payload}]
         )
         return completion.choices[0].message.content
