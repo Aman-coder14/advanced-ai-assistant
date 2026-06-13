@@ -1,21 +1,32 @@
 import sqlite3
+from datetime import datetime
 
+# Database paths
+CHATS_DB_PATH = "data/chats.db"
+USERS_DB_PATH = "data/users.db"
 
-def connect_db():
-    conn = sqlite3.connect("data/chats.db")
+# ==========================================
+# CHAT HISTORY DATABASE (Simple chats)
+# ==========================================
+
+def connect_chats_db():
+    """Connect to chats database."""
+    conn = sqlite3.connect(CHATS_DB_PATH)
+    conn.row_factory = sqlite3.Row
     return conn
 
 
-def create_table():
-
-    conn = connect_db()
+def init_chats_table():
+    """Initialize chats table for storing user and AI responses."""
+    conn = connect_chats_db()
     cursor = conn.cursor()
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS chats(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_message TEXT,
-        ai_response TEXT
+        user_message TEXT NOT NULL,
+        ai_response TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
 
@@ -23,42 +34,62 @@ def create_table():
     conn.close()
 
 
-create_table()
-
 def save_chat(user_message, ai_response):
+    """Save a single chat exchange."""
+    try:
+        conn = connect_chats_db()
+        cursor = conn.cursor()
 
-    conn = connect_db()
-    cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO chats(user_message, ai_response, created_at) VALUES (?, ?, ?)",
+            (user_message, ai_response, datetime.now().isoformat())
+        )
 
-    cursor.execute(
-        "INSERT INTO chats(user_message, ai_response) VALUES (?, ?)",
-        (user_message, ai_response)
-    )
-
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Save Chat Error: {e}")
+        return False
 
 
 def get_all_chats():
+    """Retrieve all saved chats."""
+    try:
+        conn = connect_chats_db()
+        cursor = conn.cursor()
 
-    conn = connect_db()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM chats")
-
-    data = cursor.fetchall()
-
-    conn.close()
-
-    return data
+        cursor.execute("SELECT * FROM chats ORDER BY created_at DESC")
+        data = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in data]
+    except Exception as e:
+        print(f"Get Chats Error: {e}")
+        return []
 
 
-    # Just copy and paste this to the bottom of your existing database.py file:
+def clear_all_chats():
+    """Clear all chat history."""
+    try:
+        conn = connect_chats_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chats")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Clear Chats Error: {e}")
+        return False
 
-def init_chat_tables(conn_or_path="data/chatbot.db"):
-    """Creates the chat tracking tables inside your existing database structure."""
-    import sqlite3
-    conn = sqlite3.connect(conn_or_path)
+
+# ==========================================
+# SESSION & USER DATABASE
+# ==========================================
+
+def init_session_tables():
+    """Initialize session and message tracking tables."""
+    conn = sqlite3.connect(USERS_DB_PATH)
     cursor = conn.cursor()
     
     # Session tracking table
@@ -82,57 +113,84 @@ def init_chat_tables(conn_or_path="data/chatbot.db"):
             FOREIGN KEY (session_id) REFERENCES chat_sessions (session_id) ON DELETE CASCADE
         )
     """)
+    
     conn.commit()
     conn.close()
 
-def create_new_session(session_id, user_email, title, db_path="data/chatbot.db"):
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+
+def create_new_session(session_id, user_email, title):
+    """Create a new chat session."""
     try:
+        conn = sqlite3.connect(USERS_DB_PATH)
+        cursor = conn.cursor()
+        
         cursor.execute(
-            "INSERT INTO chat_sessions (session_id, user_email, title) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO chat_sessions (session_id, user_email, title) VALUES (?, ?, ?)",
             (session_id, user_email, title)
         )
         conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    finally:
         conn.close()
+        return True
+    except Exception as e:
+        print(f"Create Session Error: {e}")
+        return False
 
-def save_message(session_id, role, content, db_path="data/chatbot.db"):
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-        (session_id, role, content)
-    )
-    conn.commit()
-    conn.close()
 
-def get_user_sessions(user_email, db_path="data/chatbot.db"):
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM chat_sessions WHERE user_email = ? ORDER BY created_at DESC",
-        (user_email,)
-    )
-    sessions = cursor.fetchall()
-    conn.close()
-    return sessions
+def save_message(session_id, role, content):
+    """Save a message in a session."""
+    try:
+        conn = sqlite3.connect(USERS_DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+            (session_id, role, content)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Save Message Error: {e}")
+        return False
 
-def get_session_messages(session_id, db_path="data/chatbot.db"):
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY timestamp ASC",
-        (session_id,)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"role": row["role"], "content": row["content"]} for row in rows]
+
+def get_session_messages(session_id):
+    """Retrieve all messages from a session."""
+    try:
+        conn = sqlite3.connect(USERS_DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY timestamp ASC",
+            (session_id,)
+        )
+        messages = cursor.fetchall()
+        conn.close()
+        
+        return [{"role": msg[0], "content": msg[1], "timestamp": msg[2]} for msg in messages]
+    except Exception as e:
+        print(f"Get Messages Error: {e}")
+        return []
+
+
+def get_user_sessions(user_email):
+    """Get all sessions for a user."""
+    try:
+        conn = sqlite3.connect(USERS_DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT session_id, title, created_at FROM chat_sessions WHERE user_email = ? ORDER BY created_at DESC",
+            (user_email,)
+        )
+        sessions = cursor.fetchall()
+        conn.close()
+        
+        return [{"session_id": s[0], "title": s[1], "created_at": s[2]} for s in sessions]
+    except Exception as e:
+        print(f"Get Sessions Error: {e}")
+        return []
+
+# Initialize database tables on import
+init_chats_table()
+init_session_tables()

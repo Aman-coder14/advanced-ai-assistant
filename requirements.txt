@@ -10,4 +10,4 @@ requests
 streamlit-oauth==0.1.14
 wikipedia==1.4.0
 gTTS
-duckduckgo_search
+duckduckgo-search
