@@ -56,8 +56,27 @@ def show_chat():
             )
 
             try:
+                # If PDF text is present in session state, include it as context
+                context_text = st.session_state.get("uploaded_pdf_text", "")
+                if context_text:
+                    truncated = context_text[:10000]
+                    composed_prompt = (
+                        "You are answering based on the uploaded PDF.\n\n"
+                        f"PDF Content:\n{truncated}\n\n"
+                        f"Question:\n{prompt}\n\n"
+                        "Answer only from the PDF content.\n"
+                        "If the answer is not present, say:\n"
+                        '"The answer was not found in the uploaded document."'
+                    )
+                else:
+                    composed_prompt = prompt
+
                 with st.spinner("Thinking..."):
-                    assistant_response = generate_response(prompt)
+                    assistant_response = generate_response(composed_prompt)
+
+                # Add source indication when PDF context was used
+                if context_text:
+                    assistant_response = f"{assistant_response}\n\nAnswer generated from uploaded PDF"
             except Exception as exc:
                 assistant_response = (
                     "I'm sorry, I couldn't generate a response right now. "
