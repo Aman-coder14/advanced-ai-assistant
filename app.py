@@ -7,6 +7,7 @@ from pages.login import show_login
 from pages.register import show_register
 from pages.dashboard import show_dashboard
 from pages.chat import show_chat
+from pages.image_chat import show_image_chat
 from pages.documents import show_documents
 from pages.research import show_research
 from pages.history import show_history
@@ -69,3 +70,6 @@ else:
 
     elif selected_page == "Settings":
         show_settings()
+
+    elif selected_page == "Image Chat":
+        show_image_chat()

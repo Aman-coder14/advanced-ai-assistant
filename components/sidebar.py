@@ -9,13 +9,14 @@ def show_sidebar():
     menu = st.sidebar.radio(
         "Navigation",
         [
-            "Dashboard",
-            "Chat",
-            "Documents",
-            "Research",
-            "History",
-            "Profile",
-            "Settings"
+    "Dashboard",
+    "Chat",
+    "Documents",
+    "Image Chat",
+    "Research",
+    "History",
+    "Profile",
+    "Settings"
         ]
     )
 
