@@ -2,6 +2,8 @@ import streamlit as st
 from components.cards import document_card
 from modules.file_loader import save_uploaded_file, extract_pdf_text
 from modules.llm import generate_response
+from modules import chunker
+from modules import embeddings
 from datetime import datetime
 
 
@@ -34,6 +36,15 @@ def show_documents():
                     st.session_state.uploaded_pdf_text += header + (full_text or "")
                     preview = full_text[:2000] + ("..." if len(full_text) > 2000 else "")
 
+                    # Chunk the extracted text and create embeddings for RAG
+                    try:
+                        chunks = chunker.chunk_text(full_text or "")
+                        if chunks:
+                            embeddings.create_embeddings(chunks)
+                            st.info(f"Indexed {len(chunks)} chunks for RAG retrieval.")
+                    except Exception as exc:
+                        st.error(f"Failed to create embeddings for RAG: {exc}")
+
                     st.markdown(
                         f"<div class=\"section-title\">{uploaded_file.name}</div>",
                         unsafe_allow_html=True,
@@ -57,9 +68,55 @@ def show_documents():
 
     if ask_clicked and question:
         pdf_text = st.session_state.get("uploaded_pdf_text", "").strip()
-        if not pdf_text:
-            st.warning("Please upload a PDF first to ask questions about it.")
-        else:
+
+        # Try RAG retrieval from FAISS first if index exists
+        try:
+            index = embeddings.load_faiss_index()
+        except Exception as exc:
+            st.error(f"Failed to load RAG index: {exc}")
+            index = None
+
+        if index is not None:
+            try:
+                with st.spinner("Retrieving relevant chunks from document..."):
+                    results = embeddings.search_similar_chunks(question, top_k=5)
+            except Exception as exc:
+                st.error(f"RAG retrieval failed: {exc}")
+                results = []
+
+            if results:
+                # determine relevance by top score
+                top_score = max(r.get("score", 0.0) for r in results)
+                # threshold for relevance (cosine-like). Tunable.
+                if top_score > 0.2:
+                    retrieved_count = len(results)
+                    retrieved_text = "\n\n".join([r.get("text", "") for r in results])
+                    truncated = retrieved_text[:10000]
+                    composed_prompt = (
+                        "You are answering questions from retrieved PDF chunks.\n\n"
+                        f"Retrieved Chunks:\n{truncated}\n\n"
+                        f"Question:\n{question}\n\n"
+                        "Answer only using information from the retrieved chunks.\n"
+                        "If the answer is not found, say:\n"
+                        '"The answer was not found in the uploaded document."'
+                    )
+                    try:
+                        with st.spinner("Analyzing retrieved chunks..."):
+                            answer = generate_response(composed_prompt)
+                    except Exception as exc:
+                        st.error(f"Failed to generate answer from chunks: {exc}")
+                        answer = ""
+
+                    st.session_state.last_pdf_qa = {"question": question, "answer": answer, "source": "Uploaded PDF (RAG)", "retrieved_count": retrieved_count}
+
+                    st.markdown(f"**Question:** {question}")
+                    st.markdown(f"**Answer:** {answer}")
+                    st.markdown(f"**Retrieved Chunks Count:** {retrieved_count}")
+                    st.markdown("**Source:** Uploaded PDF (RAG)")
+                    return
+
+        # If RAG did not return a confident answer, fall back to full PDF text or web
+        if pdf_text:
             truncated = pdf_text[:10000]
             composed_prompt = (
                 "You are answering questions from an uploaded PDF.\n\n"
@@ -69,7 +126,6 @@ def show_documents():
                 "If the answer is not found, say:\n"
                 '"The answer was not found in the uploaded document."'
             )
-            # First, try to answer from the uploaded PDF
             try:
                 with st.spinner("Analyzing document..."):
                     pdf_answer = generate_response(composed_prompt)
@@ -77,14 +133,11 @@ def show_documents():
                 st.error(f"Failed while analyzing PDF: {exc}")
                 pdf_answer = ""
 
-            # If PDF explicitly reports not found, fall back to general model/search
             not_found_marker = "The answer was not found in the uploaded document."
-
             if pdf_answer and not_found_marker not in pdf_answer:
                 answer = pdf_answer
                 source = "Uploaded PDF"
             else:
-                # No useful answer in PDF — use regular generate_response (which may use web search)
                 try:
                     with st.spinner("Querying web and AI..."):
                         answer = generate_response(question)
@@ -94,12 +147,21 @@ def show_documents():
                     answer = ""
                     source = "Error"
 
-            # store last QA with source
-            st.session_state.last_pdf_qa = {"question": question, "answer": answer, "source": source}
+        else:
+            # no pdf text — just query web/AI
+            try:
+                with st.spinner("Querying web and AI..."):
+                    answer = generate_response(question)
+                source = "AI/Web Search"
+            except Exception as exc:
+                st.error(f"Failed to get answer: {exc}")
+                answer = ""
+                source = "Error"
 
-            st.markdown(f"**Question:** {question}")
-            st.markdown(f"**Answer:** {answer}")
-            st.markdown(f"**Source:** {source}")
+        st.session_state.last_pdf_qa = {"question": question, "answer": answer, "source": source}
+        st.markdown(f"**Question:** {question}")
+        st.markdown(f"**Answer:** {answer}")
+        st.markdown(f"**Source:** {source}")
 
     st.markdown(
         '<div class="section-title">Uploaded Documents</div>',
