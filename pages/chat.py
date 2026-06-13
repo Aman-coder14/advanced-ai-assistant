@@ -1,5 +1,7 @@
 import streamlit as st
 
+from modules.llm import generate_response
+
 
 def show_chat():
 
@@ -46,7 +48,6 @@ def show_chat():
         )
 
         if prompt:
-
             st.session_state.messages.append(
                 {
                     "role": "user",
@@ -54,11 +55,20 @@ def show_chat():
                 }
             )
 
+            try:
+                with st.spinner("Thinking..."):
+                    assistant_response = generate_response(prompt)
+            except Exception as exc:
+                assistant_response = (
+                    "I'm sorry, I couldn't generate a response right now. "
+                    "Please try again in a moment."
+                )
+                st.error(f"AI service error: {exc}")
+
             st.session_state.messages.append(
                 {
                     "role": "assistant",
-                    "content":
-                    "This is a frontend demo response. Backend will be connected later."
+                    "content": assistant_response
                 }
             )
 
