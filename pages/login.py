@@ -1,5 +1,7 @@
 import streamlit as st
 
+from services.chat_service import get_or_create_user
+
 
 def show_login():
 
@@ -31,8 +33,11 @@ def show_login():
 
         with col1:
             if st.button("Login"):
+                user = get_or_create_user(email.strip() or "default")
                 st.session_state.logged_in = True
-                st.session_state.user_email = email.strip() or "default"
+                st.session_state.user_id = user.id
+                st.session_state.user_email = user.email
+                st.session_state.active_chat_id = st.session_state.get("active_chat_id")
                 st.session_state.page = "Dashboard"
                 st.rerun()
 

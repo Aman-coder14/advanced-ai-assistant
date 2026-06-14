@@ -1,156 +1,202 @@
 import streamlit as st
 
-from database.database import (
-    add_message,
-    create_chat,
+from modules.llm import generate_response
+from services.chat_service import (
+    clear_chat,
+    create_new_chat,
     delete_chat,
     get_chat,
-    list_chats,
-    messages_as_dicts,
+    get_latest_or_create_chat,
+    get_or_create_user,
+    get_user_chats,
+    load_chat,
     rename_chat,
+    save_message,
 )
-from modules.llm import generate_response
-
-
-WELCOME_MESSAGE = {
-    "role": "assistant",
-    "content": "Hello Aman, how can I help you today?",
-}
-
-
-def _user_id():
-    return st.session_state.get("user_email", "default")
-
-
-def _new_chat():
-    chat_id = create_chat(_user_id())
-    st.session_state.current_chat_id = chat_id
-    st.session_state.messages = [WELCOME_MESSAGE.copy()]
-
-
-def _load_chat(chat_id):
-    st.session_state.current_chat_id = chat_id
-    messages = messages_as_dicts(chat_id)
-    st.session_state.messages = messages or [WELCOME_MESSAGE.copy()]
 
 
 def show_chat():
+    user_id = _ensure_user()
+    _ensure_active_chat(user_id)
+
     st.markdown(
         '<div class="page-title">AI Chat</div>',
         unsafe_allow_html=True,
     )
 
-    if "current_chat_id" not in st.session_state:
-        chats = list_chats(_user_id())
-        if chats:
-            _load_chat(chats[0]["id"])
-        else:
-            _new_chat()
-
-    if "messages" not in st.session_state:
-        _load_chat(st.session_state.current_chat_id)
-
-    left, right = st.columns([1, 4])
+    left, right = st.columns([1.2, 3.8])
 
     with left:
-        st.subheader("Chats")
-
-        if st.button("New Chat"):
-            _new_chat()
-            st.rerun()
-
-        current_chat = get_chat(st.session_state.current_chat_id)
-        current_title = current_chat["title"] if current_chat else "New Chat"
-        new_title = st.text_input("Chat title", value=current_title)
-
-        if st.button("Rename"):
-            rename_chat(st.session_state.current_chat_id, new_title)
-            st.rerun()
-
-        if st.button("Delete"):
-            delete_chat(st.session_state.current_chat_id)
-            st.session_state.pop("messages", None)
-            st.session_state.pop("current_chat_id", None)
-            st.rerun()
-
-        st.divider()
-
-        for chat in list_chats(_user_id()):
-            if st.button(chat["title"], key=f"chat_{chat['id']}"):
-                _load_chat(chat["id"])
-                st.rerun()
+        _render_chat_sidebar(user_id)
 
     with right:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+        _render_chat_window(user_id)
 
-        prompt = st.chat_input("Type your message...")
 
-        if prompt:
-            st.session_state.messages.append(
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            )
-            add_message(st.session_state.current_chat_id, "user", prompt)
+def _ensure_user() -> str:
+    email = st.session_state.get("user_email", "default")
+    user = get_or_create_user(email=email)
+    st.session_state.user_id = user.id
+    st.session_state.user_email = user.email
+    return user.id
 
-            current_chat = get_chat(st.session_state.current_chat_id)
-            if current_chat and current_chat["title"] == "New Chat":
-                rename_chat(st.session_state.current_chat_id, prompt[:50])
 
-            try:
-                context_text = st.session_state.get("uploaded_pdf_text", "")
-                if context_text:
-                    truncated = context_text[:10000]
-                    composed_prompt = (
-                        "You are answering based on the uploaded PDF.\n\n"
-                        f"PDF Content:\n{truncated}\n\n"
-                        f"Question:\n{prompt}\n\n"
-                        "Answer only from the PDF content.\n"
-                        "If the answer is not present, say:\n"
-                        '"The answer was not found in the uploaded document."'
-                    )
-                else:
-                    composed_prompt = prompt
+def _ensure_active_chat(user_id: str) -> None:
+    active_chat_id = st.session_state.get("active_chat_id")
+    query_chat_id = st.query_params.get("chat_id")
+    if query_chat_id:
+        active_chat_id = query_chat_id
 
-                with st.spinner("Thinking..."):
-                    assistant_response = generate_response(composed_prompt)
+    if active_chat_id:
+        chat = get_chat(active_chat_id)
+        if chat and chat.user_id == user_id:
+            _set_active_chat(active_chat_id)
+            return
 
-                if context_text:
-                    assistant_response = (
-                        f"{assistant_response}\n\n"
-                        "Answer generated from uploaded PDF"
-                    )
-            except Exception as exc:
-                assistant_response = (
-                    "I'm sorry, I couldn't generate a response right now. "
-                    "Please try again in a moment."
-                )
-                st.error(f"AI service error: {exc}")
+    latest_chat_id = get_latest_or_create_chat(user_id)
+    _set_active_chat(latest_chat_id)
 
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": assistant_response,
-                }
-            )
-            add_message(
-                st.session_state.current_chat_id,
-                "assistant",
-                assistant_response,
-            )
 
-            st.rerun()
+def _set_active_chat(chat_id: str) -> None:
+    st.session_state.active_chat_id = chat_id
+    st.session_state.messages = load_chat(chat_id)
+    _refresh_chat_history()
+    st.query_params["chat_id"] = chat_id
 
-        col1, col2 = st.columns(2)
 
-        with col1:
-            st.button("Copy Last Response")
+def _refresh_chat_history(search: str = "") -> None:
+    user_id = st.session_state.user_id
+    st.session_state.chat_history = get_user_chats(user_id, search)
 
-        with col2:
-            if st.button("Clear Chat"):
-                delete_chat(st.session_state.current_chat_id)
-                _new_chat()
+
+def _render_chat_sidebar(user_id: str) -> None:
+    st.subheader("Chats")
+
+    if st.button("New Chat", use_container_width=True):
+        chat_id = create_new_chat(user_id)
+        _set_active_chat(chat_id)
+        st.rerun()
+
+    search = st.text_input(
+        "Search Chats",
+        placeholder="Search history...",
+        key="chat_search",
+    )
+    _refresh_chat_history(search)
+
+    active_chat = get_chat(st.session_state.active_chat_id)
+    current_title = active_chat.title if active_chat else "New Chat"
+
+    with st.expander("Manage Active Chat", expanded=False):
+        new_title = st.text_input(
+            "Chat title",
+            value=current_title,
+            key=f"title_{st.session_state.active_chat_id}",
+        )
+        rename_col, delete_col = st.columns(2)
+        with rename_col:
+            if st.button("Rename", use_container_width=True):
+                rename_chat(st.session_state.active_chat_id, new_title)
+                _refresh_chat_history(search)
                 st.rerun()
+        with delete_col:
+            if st.button("Delete", use_container_width=True):
+                _delete_active_chat(user_id)
+                st.rerun()
+
+    st.divider()
+
+    if not st.session_state.chat_history:
+        st.caption("No chats found.")
+        return
+
+    for chat in st.session_state.chat_history:
+        is_active = chat.id == st.session_state.active_chat_id
+        label = chat.title if not is_active else f"> {chat.title}"
+        if st.button(label, key=f"chat_nav_{chat.id}", use_container_width=True):
+            _set_active_chat(chat.id)
+            st.rerun()
+        if chat.preview:
+            st.caption(chat.preview[:70])
+
+
+def _render_chat_window(user_id: str) -> None:
+    active_chat = get_chat(st.session_state.active_chat_id)
+    title = active_chat.title if active_chat else "New Chat"
+    st.subheader(title)
+
+    messages = st.session_state.get("messages", [])
+    if not messages:
+        st.info("Start this conversation with a message.")
+
+    for message in messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    with st.form("chat_form", clear_on_submit=True):
+        prompt = st.text_input("Message", placeholder="Type your message...")
+        send = st.form_submit_button("Send")
+
+    if send and prompt.strip():
+        _send_message(prompt.strip())
+        st.rerun()
+
+    st.divider()
+    if st.button("Clear Chat"):
+        clear_chat(st.session_state.active_chat_id)
+        st.session_state.messages = []
+        _refresh_chat_history()
+        st.success("Current chat messages cleared.")
+        st.rerun()
+
+
+def _send_message(prompt: str) -> None:
+    chat_id = st.session_state.active_chat_id
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    save_message(chat_id, "user", prompt)
+
+    try:
+        context_text = st.session_state.get("uploaded_pdf_text", "")
+        composed_prompt = _build_prompt(prompt, context_text)
+
+        with st.spinner("Thinking..."):
+            assistant_response = generate_response(composed_prompt)
+
+        if context_text:
+            assistant_response = (
+                f"{assistant_response}\n\n"
+                "Answer generated from uploaded PDF"
+            )
+    except Exception as exc:
+        assistant_response = (
+            "I'm sorry, I couldn't generate a response right now. "
+            "Please try again in a moment."
+        )
+        st.error(f"AI service error: {exc}")
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": assistant_response}
+    )
+    save_message(chat_id, "assistant", assistant_response)
+    _refresh_chat_history()
+
+
+def _build_prompt(prompt: str, context_text: str) -> str:
+    if not context_text:
+        return prompt
+
+    truncated = context_text[:10000]
+    return (
+        "You are answering based on the uploaded PDF.\n\n"
+        f"PDF Content:\n{truncated}\n\n"
+        f"Question:\n{prompt}\n\n"
+        "Answer only from the PDF content.\n"
+        "If the answer is not present, say:\n"
+        '"The answer was not found in the uploaded document."'
+    )
+
+
+def _delete_active_chat(user_id: str) -> None:
+    delete_chat(st.session_state.active_chat_id)
+    next_chat_id = get_latest_or_create_chat(user_id)
+    _set_active_chat(next_chat_id)
