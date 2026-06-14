@@ -32,6 +32,7 @@ def show_login():
         with col1:
             if st.button("Login"):
                 st.session_state.logged_in = True
+                st.session_state.user_email = email.strip() or "default"
                 st.session_state.page = "Dashboard"
                 st.rerun()
 
