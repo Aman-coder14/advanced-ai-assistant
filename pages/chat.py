@@ -1,6 +1,7 @@
 import streamlit as st
+import traceback
 
-from modules.llm import generate_response
+from modules.llm import generate_response, get_ai_debug_status
 from services.chat_service import (
     clear_chat,
     create_new_chat,
@@ -142,21 +143,34 @@ def _render_chat_window(user_id: str) -> None:
     if st.button("Clear Chat"):
         clear_chat(st.session_state.active_chat_id)
         st.session_state.messages = []
+        st.session_state.last_ai_exception = ""
         _refresh_chat_history()
         st.success("Current chat messages cleared.")
         st.rerun()
 
+    _render_debug_panel()
+
 
 def _send_message(prompt: str) -> None:
     chat_id = st.session_state.active_chat_id
+    if not chat_id:
+        st.session_state.last_ai_exception = "Missing active_chat_id."
+        st.error("AI Error: Missing active chat id.")
+        return
+
+    st.session_state.last_ai_exception = ""
+    st.session_state.last_ai_status = "Saving user message"
     save_message(chat_id, "user", prompt)
 
     try:
         context_text = st.session_state.get("uploaded_pdf_text", "")
         composed_prompt = _build_prompt(prompt, context_text)
 
+        st.session_state.last_ai_status = "Calling generate_response"
+        print(f"[CHAT] Calling generate_response for chat_id={chat_id}")
         with st.spinner("Thinking..."):
             assistant_response = generate_response(composed_prompt)
+        print(f"[CHAT] AI response received for chat_id={chat_id}")
 
         if context_text:
             assistant_response = (
@@ -170,14 +184,20 @@ def _send_message(prompt: str) -> None:
                 "response. Please try again."
             )
     except Exception as exc:
+        error_trace = traceback.format_exc()
+        st.session_state.last_ai_exception = error_trace
+        st.session_state.last_ai_status = "AI call failed"
         assistant_response = (
-            "I'm sorry, I couldn't generate a response right now. "
-            "Please try again in a moment."
+            "AI Error: I could not generate a response.\n\n"
+            f"{exc}"
         )
-        st.error(f"AI service error: {exc}")
+        st.error(f"AI Error: {exc}")
+        st.code(error_trace)
 
+    st.session_state.last_ai_status = "Saving assistant message"
     save_message(chat_id, "assistant", assistant_response)
     st.session_state.messages = load_chat(chat_id)
+    st.session_state.last_ai_status = "Assistant message saved"
     _refresh_chat_history()
 
 
@@ -234,6 +254,25 @@ def _escape_html(value: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#x27;")
     )
+
+
+def _render_debug_panel() -> None:
+    status = get_ai_debug_status()
+    messages = st.session_state.get("messages", [])
+    last_exception = st.session_state.get("last_ai_exception", "")
+
+    with st.expander("Debug Panel", expanded=bool(last_exception)):
+        st.write(f"Current chat id: {st.session_state.get('active_chat_id', 'missing')}")
+        st.write(f"Number of messages: {len(messages)}")
+        st.write(f"Selected provider: {status.get('provider') or 'none'}")
+        st.write(f"GROQ_API_KEY detected: {status.get('groq_key')}")
+        st.write(f"GEMINI_API_KEY detected: {status.get('gemini_key')}")
+        st.write(f"OPENAI_API_KEY detected: {status.get('openai_key')}")
+        st.write(f"SERPER_API_KEY detected: {status.get('serper_key')}")
+        st.write(f"Last AI status: {st.session_state.get('last_ai_status', 'idle')}")
+        if last_exception:
+            st.error("Last exception")
+            st.code(last_exception)
 
 
 def _delete_active_chat(user_id: str) -> None:

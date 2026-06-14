@@ -6,12 +6,27 @@ simple search helper that returns top Google search results.
 """
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv()
+else:
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 SEARCH_ENDPOINT = "https://google.serper.dev/search"
