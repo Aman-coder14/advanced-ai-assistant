@@ -28,7 +28,20 @@ else:
             key, value = line.split("=", 1)
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
-SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+def _secret(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+
+    try:
+        import streamlit as st
+
+        return str(st.secrets.get(name, "")).strip()
+    except Exception:
+        return ""
+
+
+SERPER_API_KEY = _secret("SERPER_API_KEY")
 SEARCH_ENDPOINT = "https://google.serper.dev/search"
 
 

@@ -38,6 +38,25 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "").strip()
 
+
+def _secret(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+
+    try:
+        import streamlit as st
+
+        return str(st.secrets.get(name, "")).strip()
+    except Exception:
+        return ""
+
+
+GROQ_API_KEY = _secret("GROQ_API_KEY")
+GEMINI_API_KEY = _secret("GEMINI_API_KEY")
+OPENAI_API_KEY = _secret("OPENAI_API_KEY")
+SERPER_API_KEY = _secret("SERPER_API_KEY")
+
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
