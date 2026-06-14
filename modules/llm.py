@@ -203,27 +203,59 @@ def _generate_with_groq(prompt: str) -> str:
     try:
         from groq import Groq
     except ImportError as exc:
-        raise RuntimeError("Groq SDK is missing. Install it with: pip install groq") from exc
+        raise RuntimeError(
+            "Groq SDK is missing. Install it with: pip install groq"
+        ) from exc
 
-    client = Groq(api_key=GROQ_API_KEY, timeout=45)
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant. Answer clearly and directly.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-    )
-
-    if response is None:
-        raise RuntimeError("No response received from Groq.")
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is missing")
 
     try:
-        return str(response.choices[0].message.content).strip()
+        print("[AI] Creating Groq client")
+
+        client = Groq(api_key=GROQ_API_KEY)
+
+        print(f"[AI] Sending request to Groq | Model={GROQ_MODEL}")
+
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant. Answer clearly and directly."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1024,
+        )
+
+        print("[AI] Groq response received")
+
+        if response is None:
+            raise RuntimeError("Groq returned None")
+
+        if not getattr(response, "choices", None):
+            raise RuntimeError("Groq returned no choices")
+
+        message = response.choices[0].message
+
+        if message is None:
+            raise RuntimeError("Groq returned empty message")
+
+        content = getattr(message, "content", None)
+
+        if not content:
+            raise RuntimeError("Groq returned empty content")
+
+        return content.strip()
+
     except Exception as exc:
-        raise RuntimeError("Groq response did not contain assistant text.") from exc
+        print(f"[AI] Groq Error: {type(exc).__name__}: {exc}")
+        raise RuntimeError(f"Groq API Error: {exc}") from exc
 
 
 def _generate_with_gemini(prompt: str) -> str:
