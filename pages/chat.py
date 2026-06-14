@@ -159,10 +159,10 @@ def _send_message(prompt: str) -> None:
         return
 
     st.session_state.last_ai_exception = ""
-    st.session_state.last_ai_status = "Saving user message"
-    save_message(chat_id, "user", prompt)
-
     try:
+        st.session_state.last_ai_status = "Saving user message"
+        save_message(chat_id, "user", prompt)
+
         context_text = st.session_state.get("uploaded_pdf_text", "")
         composed_prompt = _build_prompt(prompt, context_text)
 
@@ -183,21 +183,27 @@ def _send_message(prompt: str) -> None:
                 "I received your message, but the AI service returned an empty "
                 "response. Please try again."
             )
+
+        st.session_state.last_ai_status = "Saving assistant message"
+        save_message(chat_id, "assistant", assistant_response)
+        st.session_state.last_ai_status = "Assistant message saved"
     except Exception as exc:
         error_trace = traceback.format_exc()
         st.session_state.last_ai_exception = error_trace
-        st.session_state.last_ai_status = "AI call failed"
+        st.session_state.last_ai_status = "Chat send failed"
         assistant_response = (
             "AI Error: I could not generate a response.\n\n"
             f"{exc}"
         )
         st.error(f"AI Error: {exc}")
         st.code(error_trace)
+        try:
+            save_message(chat_id, "assistant", assistant_response)
+        except Exception:
+            st.session_state.last_ai_exception += "\n\nFailed to save assistant error:\n"
+            st.session_state.last_ai_exception += traceback.format_exc()
 
-    st.session_state.last_ai_status = "Saving assistant message"
-    save_message(chat_id, "assistant", assistant_response)
     st.session_state.messages = load_chat(chat_id)
-    st.session_state.last_ai_status = "Assistant message saved"
     _refresh_chat_history()
 
 

@@ -83,6 +83,11 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
     if _table_exists(conn, "messages"):
         legacy_messages = conn.execute("SELECT * FROM messages ORDER BY id ASC").fetchall()
 
+    if _table_exists(conn, "legacy_chats"):
+        conn.execute("DROP TABLE legacy_chats")
+    if _table_exists(conn, "legacy_messages"):
+        conn.execute("DROP TABLE legacy_messages")
+
     conn.execute("ALTER TABLE chats RENAME TO legacy_chats")
     if _table_exists(conn, "messages"):
         conn.execute("ALTER TABLE messages RENAME TO legacy_messages")
