@@ -125,19 +125,16 @@ def _render_chat_window(user_id: str) -> None:
     title = active_chat.title if active_chat else "New Chat"
     st.subheader(title)
 
-    messages = st.session_state.get("messages", [])
+    messages = load_chat(st.session_state.active_chat_id)
+    st.session_state.messages = messages
     if not messages:
         st.info("Start this conversation with a message.")
 
     for message in messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+        _render_message(message["role"], message["content"])
 
-    with st.form("chat_form", clear_on_submit=True):
-        prompt = st.text_input("Message", placeholder="Type your message...")
-        send = st.form_submit_button("Send")
-
-    if send and prompt.strip():
+    prompt = st.chat_input("Type your message...")
+    if prompt and prompt.strip():
         _send_message(prompt.strip())
         st.rerun()
 
@@ -152,7 +149,6 @@ def _render_chat_window(user_id: str) -> None:
 
 def _send_message(prompt: str) -> None:
     chat_id = st.session_state.active_chat_id
-    st.session_state.messages.append({"role": "user", "content": prompt})
     save_message(chat_id, "user", prompt)
 
     try:
@@ -167,6 +163,12 @@ def _send_message(prompt: str) -> None:
                 f"{assistant_response}\n\n"
                 "Answer generated from uploaded PDF"
             )
+        assistant_response = (assistant_response or "").strip()
+        if not assistant_response:
+            assistant_response = (
+                "I received your message, but the AI service returned an empty "
+                "response. Please try again."
+            )
     except Exception as exc:
         assistant_response = (
             "I'm sorry, I couldn't generate a response right now. "
@@ -174,10 +176,8 @@ def _send_message(prompt: str) -> None:
         )
         st.error(f"AI service error: {exc}")
 
-    st.session_state.messages.append(
-        {"role": "assistant", "content": assistant_response}
-    )
     save_message(chat_id, "assistant", assistant_response)
+    st.session_state.messages = load_chat(chat_id)
     _refresh_chat_history()
 
 
@@ -193,6 +193,46 @@ def _build_prompt(prompt: str, context_text: str) -> str:
         "Answer only from the PDF content.\n"
         "If the answer is not present, say:\n"
         '"The answer was not found in the uploaded document."'
+    )
+
+
+def _render_message(role: str, content: str) -> None:
+    if role == "assistant":
+        label = "AI"
+        background = "#182033"
+        border = "#31568f"
+    else:
+        label = "You"
+        background = "#1b1f2a"
+        border = "#30363d"
+
+    st.markdown(
+        f"""
+        <div style="
+            border: 1px solid {border};
+            background: {background};
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 10px 0;
+        ">
+            <div style="font-size: 12px; color: #9CA3AF; margin-bottom: 6px;">
+                {label}
+            </div>
+            <div style="white-space: pre-wrap; color: white;">{_escape_html(content)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _escape_html(value: str) -> str:
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
     )
 
 
