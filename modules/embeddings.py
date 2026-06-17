@@ -5,14 +5,6 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 
 try:
-    from sentence_transformers import SentenceTransformer
-except Exception as exc:  # pragma: no cover - informative error
-    raise ImportError(
-        "sentence-transformers is required for modules.embeddings. "
-        "Install with `pip install sentence-transformers`"
-    ) from exc
-
-try:
     import faiss
 except Exception as exc:  # pragma: no cover - informative error
     raise ImportError(
@@ -33,7 +25,14 @@ META_PATH = METADATA_DIR / "chunks.json"
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 
-def _load_model() -> SentenceTransformer:
+def _load_model():
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception as exc:
+        raise RuntimeError(
+            "sentence-transformers is not installed correctly."
+        ) from exc
+
     return SentenceTransformer(MODEL_NAME)
 
 
