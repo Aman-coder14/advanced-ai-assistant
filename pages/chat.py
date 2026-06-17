@@ -186,7 +186,12 @@ def _send_message(prompt: str) -> None:
     try:
         st.session_state.last_ai_status = "Saving user message"
         print("[DEBUG] STEP 1: Saving user message to database...")
-        save_message(chat_id, "user", prompt)
+       try:
+    save_message(chat_id, "user", prompt)
+except Exception as e:
+    st.error(f"Save error: {e}")
+    print(f"SAVE ERROR: {e}")
+    st.session_state.last_ai_status = "Calling generate_response"
         print("[DEBUG] STEP 2: User message saved successfully.")
     except Exception as db_err:
         print(f"[DEBUG] DATABASE ERROR (User Message): {db_err}")
