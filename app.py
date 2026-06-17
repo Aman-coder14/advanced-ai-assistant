@@ -1,3 +1,23 @@
+import os
+import sys
+
+# Get the absolute path of the directory containing app.py
+root_path = os.path.dirname(os.path.abspath(__file__))
+
+# Insert it into the system path so Python can resolve 'pages', 'database', etc.
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+
+# ----------------------------------------------------
+# Your existing imports can follow safely below this:
+# ----------------------------------------------------
+import streamlit as st
+from components.styles import load_css
+from components.sidebar import show_sidebar
+
+from pages.login import show_login
+from pages.register import show_register
+# ... rest of your code
 import streamlit as st
 
 from components.styles import load_css
