@@ -159,51 +159,71 @@ def _send_message(prompt: str) -> None:
         return
 
     st.session_state.last_ai_exception = ""
+    
+    # 1. TRY SAVING USER MESSAGE
     try:
         st.session_state.last_ai_status = "Saving user message"
+        print("[DEBUG] STEP 1: Saving user message to database...")
         save_message(chat_id, "user", prompt)
+        print("[DEBUG] STEP 2: User message saved successfully.")
+    except Exception as db_err:
+        print(f"[DEBUG] DATABASE ERROR (User Message): {db_err}")
+        st.warning(f"Database warning (couldn't save your prompt historical log): {db_err}")
 
+    # 2. GENERATE PROMPT & CALL AI
+    try:
         context_text = st.session_state.get("uploaded_pdf_text", "")
         composed_prompt = _build_prompt(prompt, context_text)
 
         st.session_state.last_ai_status = "Calling generate_response"
-        print(f"[CHAT] Calling generate_response for chat_id={chat_id}")
+        print(f"[DEBUG] STEP 3: Calling AI via generate_response for chat_id={chat_id}")
+        
         with st.spinner("Thinking..."):
             assistant_response = generate_response(composed_prompt)
-        print(f"[CHAT] AI response received for chat_id={chat_id}")
+        
+        print(f"[DEBUG] STEP 4: AI response received back successfully.")
 
         if context_text:
-            assistant_response = (
-                f"{assistant_response}\n\n"
-                "Answer generated from uploaded PDF"
-            )
+            assistant_response = f"{assistant_response}\n\nAnswer generated from uploaded PDF"
+        
         assistant_response = (assistant_response or "").strip()
         if not assistant_response:
-            assistant_response = (
-                "I received your message, but the AI service returned an empty "
-                "response. Please try again."
-            )
+            assistant_response = "I received your message, but the AI service returned an empty response."
 
-        st.session_state.last_ai_status = "Saving assistant message"
-        save_message(chat_id, "assistant", assistant_response)
-        st.session_state.last_ai_status = "Assistant message saved"
+        # 3. TRY SAVING AI RESPONSE
+        try:
+            st.session_state.last_ai_status = "Saving assistant message"
+            save_message(chat_id, "assistant", assistant_response)
+            st.session_state.last_ai_status = "Assistant message saved"
+            print("[DEBUG] STEP 5: AI response saved to database.")
+        except Exception as db_err:
+            print(f"[DEBUG] DATABASE ERROR (AI Message): {db_err}")
+            st.warning(f"Database warning (couldn't save AI response log): {db_err}")
+
     except Exception as exc:
         error_trace = traceback.format_exc()
+        print(f"[DEBUG] CRITICAL AI ERROR: {exc}")
+        print(error_trace)
         st.session_state.last_ai_exception = error_trace
         st.session_state.last_ai_status = "Chat send failed"
-        assistant_response = (
-            "AI Error: I could not generate a response.\n\n"
-            f"{exc}"
-        )
+        
+        assistant_response = f"AI Error: I could not generate a response.\n\n{exc}"
         st.error(f"AI Error: {exc}")
         st.code(error_trace)
+        
         try:
             save_message(chat_id, "assistant", assistant_response)
         except Exception:
-            st.session_state.last_ai_exception += "\n\nFailed to save assistant error:\n"
-            st.session_state.last_ai_exception += traceback.format_exc()
+            pass
 
-    st.session_state.messages = load_chat(chat_id)
+    # Refresh ui memory states safely
+    try:
+        st.session_state.messages = load_chat(chat_id)
+    except Exception:
+        # Fallback if DB completely blocked so page doesn't crash blank
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+            
     _refresh_chat_history()
 
 
