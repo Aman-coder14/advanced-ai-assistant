@@ -4,33 +4,51 @@ import os
 import sqlite3
 import uuid
 from pathlib import Path
+import streamlit as st
 
-
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.getenv("CHAT_DB_PATH", BASE_DIR / "chats.db"))
+# --- DEPLOYMENT PATH FIX ---
+# Streamlit Cloud file systems are often read-only or ephemeral at the repo root.
+# This check safely switches the database path to /tmp on the cloud while keeping local pristine.
+if os.environ.get("STREAMLIT_RUNTIME_CHECK") or os.getcwd().startswith("/mount"):
+    DB_PATH = Path("/tmp/chats.db")
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    DB_PATH = Path(os.getenv("CHAT_DB_PATH", BASE_DIR / "chats.db"))
+# ----------------------------
 
 def get_connection() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    """Establishes a connection to the SQLite database, creating parent directories if missing."""
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(
-        DB_PATH,
-        timeout=30,
-        check_same_thread=False
-    )
+        conn = sqlite3.connect(
+            DB_PATH,
+            timeout=30,
+            check_same_thread=False
+        )
 
-    conn.row_factory = sqlite3.Row
+        conn.row_factory = sqlite3.Row
 
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode=WAL")
+        # Performance and integrity tuning
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode=WAL")
 
-    return conn
+        return conn
+    except Exception as e:
+        st.error(f"Failed to connect to database at {DB_PATH}: {str(e)}")
+        raise e
 
 
 def init_db() -> None:
-    with get_connection() as conn:
-        _migrate_legacy_schema(conn)
-        _create_tables(conn)
-        _create_indexes(conn)
+    """Initializes tables, handles legacy structural migrations, and sets up indexing."""
+    try:
+        with get_connection() as conn:
+            _migrate_legacy_schema(conn)
+            _create_tables(conn)
+            _create_indexes(conn)
+    except Exception as e:
+        # Prevents the application from failing silently in production
+        st.error(f"Critical Database Initialization Error: {str(e)}")
 
 
 def _create_tables(conn: sqlite3.Connection) -> None:

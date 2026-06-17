@@ -153,9 +153,64 @@ def _render_chat_window(user_id: str) -> None:
     for message in messages:
         _render_message(message["role"], message["content"])
 
+    # --- CHAT SUBMISSION LOGIC (PROPERLY INDENTED & ORDERED) ---
     prompt = st.chat_input("Type your message...")
     if prompt and prompt.strip():
-        _send_message(prompt.strip())
+        prompt = prompt.strip()
+        chat_id = st.session_state.active_chat_id
+
+        if not chat_id:
+            st.session_state.last_ai_exception = "Missing active_chat_id."
+            st.error("AI Error: Missing active chat id.")
+            return
+
+        st.session_state.last_ai_exception = ""
+
+        # 1. Save User Message to Database
+        try:
+            st.session_state.last_ai_status = "Before save_message"
+            save_message(chat_id, "user", prompt)
+            st.session_state.last_ai_status = "After save_message"
+        except Exception as e:
+            st.error(f"Save error: {e}")
+
+        # 2. Query AI Model Pipeline
+        try:
+            context_text = st.session_state.get("uploaded_pdf_text", "")
+            composed_prompt = _build_prompt(prompt, context_text)
+
+            st.session_state.last_ai_status = "Calling generate_response"
+            with st.spinner("Thinking..."):
+                assistant_response = generate_response(composed_prompt)
+
+            if context_text:
+                assistant_response += "\n\nAnswer generated from uploaded PDF"
+
+            assistant_response = (assistant_response or "").strip()
+            if not assistant_response:
+                assistant_response = "I received your message, but the AI service returned an empty response."
+
+            # 3. Save Assistant Response to Database
+            try:
+                st.session_state.last_ai_status = "Saving assistant message"
+                save_message(chat_id, "assistant", assistant_response)
+                st.session_state.last_ai_status = "Assistant message saved"
+            except Exception as e:
+                st.warning(f"Assistant save warning: {e}")
+
+        except Exception as exc:
+            error_trace = traceback.format_exc()
+            st.session_state.last_ai_exception = error_trace
+            st.session_state.last_ai_status = "Chat send failed"
+            st.error(f"AI Error: {exc}")
+
+        # 4. Sync State and Force Refresh Interface
+        try:
+            st.session_state.messages = load_chat(chat_id)
+        except Exception:
+            pass
+
+        _refresh_chat_history()
         st.rerun()
 
     st.divider()
@@ -171,104 +226,6 @@ def _render_chat_window(user_id: str) -> None:
         st.rerun()
 
     _render_debug_panel()
-
-
-def _send_message(prompt: str) -> None:
-    chat_id = st.session_state.active_chat_id
-
-    if not chat_id:
-        st.session_state.last_ai_exception = "Missing active_chat_id."
-        st.error("AI Error: Missing active chat id.")
-        return
-
-    st.session_state.last_ai_exception = ""
-
-    # -------------------------
-    # SAVE USER MESSAGE
-    # -------------------------
-    try:
-        st.session_state.last_ai_status = "Before save_message"
-        print("[DEBUG] Before save_message")
-
-        save_message(chat_id, "user", prompt)
-
-        st.session_state.last_ai_status = "After save_message"
-        print("[DEBUG] After save_message")
-
-    except Exception as e:
-        print(f"[DEBUG] SAVE ERROR: {e}")
-        st.error(f"Save error: {e}")
-
-    # -------------------------
-    # GENERATE AI RESPONSE
-    # -------------------------
-    try:
-        context_text = st.session_state.get("uploaded_pdf_text", "")
-
-        composed_prompt = _build_prompt(prompt, context_text)
-
-        st.session_state.last_ai_status = "Calling generate_response"
-        print("[DEBUG] Calling generate_response")
-
-        with st.spinner("Thinking..."):
-            assistant_response = generate_response(composed_prompt)
-
-        print("[DEBUG] AI response received")
-
-        if context_text:
-            assistant_response += "\n\nAnswer generated from uploaded PDF"
-
-        assistant_response = (assistant_response or "").strip()
-
-        if not assistant_response:
-            assistant_response = (
-                "I received your message, but the AI service returned an empty response."
-            )
-
-        # -------------------------
-        # SAVE AI RESPONSE
-        # -------------------------
-        try:
-            st.session_state.last_ai_status = "Saving assistant message"
-
-            save_message(
-                chat_id,
-                "assistant",
-                assistant_response
-            )
-
-            st.session_state.last_ai_status = "Assistant message saved"
-
-            print("[DEBUG] Assistant response saved")
-
-        except Exception as e:
-            print(f"[DEBUG] ASSISTANT SAVE ERROR: {e}")
-            st.warning(f"Assistant save warning: {e}")
-
-    except Exception as exc:
-        error_trace = traceback.format_exc()
-
-        print(f"[DEBUG] AI ERROR: {exc}")
-
-        st.session_state.last_ai_exception = error_trace
-        st.session_state.last_ai_status = "Chat send failed"
-
-        assistant_response = (
-            f"AI Error: I could not generate a response.\n\n{exc}"
-        )
-
-        st.error(f"AI Error: {exc}")
-        st.code(error_trace)
-
-    # -------------------------
-    # REFRESH CHAT
-    # -------------------------
-    try:
-        st.session_state.messages = load_chat(chat_id)
-    except Exception:
-        pass
-
-    _refresh_chat_history()
 
 
 def _build_prompt(prompt: str, context_text: str) -> str:
