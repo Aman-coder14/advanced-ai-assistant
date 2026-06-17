@@ -60,14 +60,20 @@ def _ensure_active_chat(user_id: str) -> None:
 
 def _set_active_chat(chat_id: str) -> None:
     st.session_state.active_chat_id = chat_id
-    st.session_state.messages = load_chat(chat_id)
+    try:
+        st.session_state.messages = load_chat(chat_id)
+    except Exception:
+        st.session_state.messages = []
     _refresh_chat_history()
     st.query_params["chat_id"] = chat_id
 
 
 def _refresh_chat_history(search: str = "") -> None:
     user_id = st.session_state.user_id
-    st.session_state.chat_history = get_user_chats(user_id, search)
+    try:
+        st.session_state.chat_history = get_user_chats(user_id, search)
+    except Exception:
+        st.session_state.chat_history = []
 
 
 def _render_chat_sidebar(user_id: str) -> None:
@@ -85,7 +91,12 @@ def _render_chat_sidebar(user_id: str) -> None:
     )
     _refresh_chat_history(search)
 
-    active_chat = get_chat(st.session_state.active_chat_id)
+    active_chat = None
+    try:
+        active_chat = get_chat(st.session_state.active_chat_id)
+    except Exception:
+        pass
+        
     current_title = active_chat.title if active_chat else "New Chat"
 
     with st.expander("Manage Active Chat", expanded=False):
@@ -97,7 +108,10 @@ def _render_chat_sidebar(user_id: str) -> None:
         rename_col, delete_col = st.columns(2)
         with rename_col:
             if st.button("Rename", use_container_width=True):
-                rename_chat(st.session_state.active_chat_id, new_title)
+                try:
+                    rename_chat(st.session_state.active_chat_id, new_title)
+                except Exception:
+                    pass
                 _refresh_chat_history(search)
                 st.rerun()
         with delete_col:
@@ -107,11 +121,12 @@ def _render_chat_sidebar(user_id: str) -> None:
 
     st.divider()
 
-    if not st.session_state.chat_history:
+    chat_history = st.session_state.get("chat_history", [])
+    if not chat_history:
         st.caption("No chats found.")
         return
 
-    for chat in st.session_state.chat_history:
+    for chat in chat_history:
         is_active = chat.id == st.session_state.active_chat_id
         label = chat.title if not is_active else f"> {chat.title}"
         if st.button(label, key=f"chat_nav_{chat.id}", use_container_width=True):
@@ -122,12 +137,16 @@ def _render_chat_sidebar(user_id: str) -> None:
 
 
 def _render_chat_window(user_id: str) -> None:
-    active_chat = get_chat(st.session_state.active_chat_id)
+    active_chat = None
+    try:
+        active_chat = get_chat(st.session_state.active_chat_id)
+    except Exception:
+        pass
+        
     title = active_chat.title if active_chat else "New Chat"
     st.subheader(title)
 
-    messages = load_chat(st.session_state.active_chat_id)
-    st.session_state.messages = messages
+    messages = st.session_state.get("messages", [])
     if not messages:
         st.info("Start this conversation with a message.")
 
@@ -141,7 +160,10 @@ def _render_chat_window(user_id: str) -> None:
 
     st.divider()
     if st.button("Clear Chat"):
-        clear_chat(st.session_state.active_chat_id)
+        try:
+            clear_chat(st.session_state.active_chat_id)
+        except Exception:
+            pass
         st.session_state.messages = []
         st.session_state.last_ai_exception = ""
         _refresh_chat_history()
@@ -160,7 +182,7 @@ def _send_message(prompt: str) -> None:
 
     st.session_state.last_ai_exception = ""
     
-    # 1. TRY SAVING USER MESSAGE
+    # 1. TRY SAVING USER MESSAGE (Won't freeze if DB crashes)
     try:
         st.session_state.last_ai_status = "Saving user message"
         print("[DEBUG] STEP 1: Saving user message to database...")
@@ -168,9 +190,9 @@ def _send_message(prompt: str) -> None:
         print("[DEBUG] STEP 2: User message saved successfully.")
     except Exception as db_err:
         print(f"[DEBUG] DATABASE ERROR (User Message): {db_err}")
-        st.warning(f"Database warning (couldn't save your prompt historical log): {db_err}")
+        st.warning(f"Database warning (Message log skipped): {db_err}")
 
-    # 2. GENERATE PROMPT & CALL AI
+    # 2. GENERATE RESPONSE FROM AI
     try:
         context_text = st.session_state.get("uploaded_pdf_text", "")
         composed_prompt = _build_prompt(prompt, context_text)
@@ -198,12 +220,11 @@ def _send_message(prompt: str) -> None:
             print("[DEBUG] STEP 5: AI response saved to database.")
         except Exception as db_err:
             print(f"[DEBUG] DATABASE ERROR (AI Message): {db_err}")
-            st.warning(f"Database warning (couldn't save AI response log): {db_err}")
+            st.warning(f"Database warning (AI log skipped): {db_err}")
 
     except Exception as exc:
         error_trace = traceback.format_exc()
         print(f"[DEBUG] CRITICAL AI ERROR: {exc}")
-        print(error_trace)
         st.session_state.last_ai_exception = error_trace
         st.session_state.last_ai_status = "Chat send failed"
         
@@ -216,14 +237,14 @@ def _send_message(prompt: str) -> None:
         except Exception:
             pass
 
-    # Refresh ui memory states safely
-    try:
-        st.session_state.messages = load_chat(chat_id)
-    except Exception:
-        # Fallback if DB completely blocked so page doesn't crash blank
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-            
+    # Append locally so it renders immediately even if database fails
+    if "messages" not in st.session_state or not isinstance(st.session_state.messages, list):
+        st.session_state.messages = []
+    
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    if 'assistant_response' in locals():
+        st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+
     _refresh_chat_history()
 
 
@@ -302,6 +323,12 @@ def _render_debug_panel() -> None:
 
 
 def _delete_active_chat(user_id: str) -> None:
-    delete_chat(st.session_state.active_chat_id)
-    next_chat_id = get_latest_or_create_chat(user_id)
-    _set_active_chat(next_chat_id)
+    try:
+        delete_chat(st.session_state.active_chat_id)
+    except Exception:
+        pass
+    try:
+        next_chat_id = get_latest_or_create_chat(user_id)
+        _set_active_chat(next_chat_id)
+    except Exception:
+        pass
