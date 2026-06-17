@@ -175,80 +175,98 @@ def _render_chat_window(user_id: str) -> None:
 
 def _send_message(prompt: str) -> None:
     chat_id = st.session_state.active_chat_id
+
     if not chat_id:
         st.session_state.last_ai_exception = "Missing active_chat_id."
         st.error("AI Error: Missing active chat id.")
         return
 
     st.session_state.last_ai_exception = ""
-    
-    # 1. TRY SAVING USER MESSAGE (Won't freeze if DB crashes)
-    try:
-        st.session_state.last_ai_status = "Saving user message"
-        print("[DEBUG] STEP 1: Saving user message to database...")
-       try:
-    save_message(chat_id, "user", prompt)
-except Exception as e:
-    st.error(f"Save error: {e}")
-    print(f"SAVE ERROR: {e}")
-    st.session_state.last_ai_status = "Calling generate_response"
-        print("[DEBUG] STEP 2: User message saved successfully.")
-    except Exception as db_err:
-        print(f"[DEBUG] DATABASE ERROR (User Message): {db_err}")
-        st.warning(f"Database warning (Message log skipped): {db_err}")
 
-    # 2. GENERATE RESPONSE FROM AI
+    # -------------------------
+    # SAVE USER MESSAGE
+    # -------------------------
+    try:
+        st.session_state.last_ai_status = "Before save_message"
+        print("[DEBUG] Before save_message")
+
+        save_message(chat_id, "user", prompt)
+
+        st.session_state.last_ai_status = "After save_message"
+        print("[DEBUG] After save_message")
+
+    except Exception as e:
+        print(f"[DEBUG] SAVE ERROR: {e}")
+        st.error(f"Save error: {e}")
+
+    # -------------------------
+    # GENERATE AI RESPONSE
+    # -------------------------
     try:
         context_text = st.session_state.get("uploaded_pdf_text", "")
+
         composed_prompt = _build_prompt(prompt, context_text)
 
         st.session_state.last_ai_status = "Calling generate_response"
-        print(f"[DEBUG] STEP 3: Calling AI via generate_response for chat_id={chat_id}")
-        
+        print("[DEBUG] Calling generate_response")
+
         with st.spinner("Thinking..."):
             assistant_response = generate_response(composed_prompt)
-        
-        print(f"[DEBUG] STEP 4: AI response received back successfully.")
+
+        print("[DEBUG] AI response received")
 
         if context_text:
-            assistant_response = f"{assistant_response}\n\nAnswer generated from uploaded PDF"
-        
-        assistant_response = (assistant_response or "").strip()
-        if not assistant_response:
-            assistant_response = "I received your message, but the AI service returned an empty response."
+            assistant_response += "\n\nAnswer generated from uploaded PDF"
 
-        # 3. TRY SAVING AI RESPONSE
+        assistant_response = (assistant_response or "").strip()
+
+        if not assistant_response:
+            assistant_response = (
+                "I received your message, but the AI service returned an empty response."
+            )
+
+        # -------------------------
+        # SAVE AI RESPONSE
+        # -------------------------
         try:
             st.session_state.last_ai_status = "Saving assistant message"
-            save_message(chat_id, "assistant", assistant_response)
+
+            save_message(
+                chat_id,
+                "assistant",
+                assistant_response
+            )
+
             st.session_state.last_ai_status = "Assistant message saved"
-            print("[DEBUG] STEP 5: AI response saved to database.")
-        except Exception as db_err:
-            print(f"[DEBUG] DATABASE ERROR (AI Message): {db_err}")
-            st.warning(f"Database warning (AI log skipped): {db_err}")
+
+            print("[DEBUG] Assistant response saved")
+
+        except Exception as e:
+            print(f"[DEBUG] ASSISTANT SAVE ERROR: {e}")
+            st.warning(f"Assistant save warning: {e}")
 
     except Exception as exc:
         error_trace = traceback.format_exc()
-        print(f"[DEBUG] CRITICAL AI ERROR: {exc}")
+
+        print(f"[DEBUG] AI ERROR: {exc}")
+
         st.session_state.last_ai_exception = error_trace
         st.session_state.last_ai_status = "Chat send failed"
-        
-        assistant_response = f"AI Error: I could not generate a response.\n\n{exc}"
+
+        assistant_response = (
+            f"AI Error: I could not generate a response.\n\n{exc}"
+        )
+
         st.error(f"AI Error: {exc}")
         st.code(error_trace)
-        
-        try:
-            save_message(chat_id, "assistant", assistant_response)
-        except Exception:
-            pass
 
-    # Append locally so it renders immediately even if database fails
-    if "messages" not in st.session_state or not isinstance(st.session_state.messages, list):
-        st.session_state.messages = []
-    
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    if 'assistant_response' in locals():
-        st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+    # -------------------------
+    # REFRESH CHAT
+    # -------------------------
+    try:
+        st.session_state.messages = load_chat(chat_id)
+    except Exception:
+        pass
 
     _refresh_chat_history()
 
