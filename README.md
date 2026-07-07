@@ -1,22 +1,33 @@
-# Advanced AI Assistant
+## 🛠️ Tech Stack
 
-This is a modern AI Assistant built using:
+### Frontend
 - Streamlit
-- Groq API
-- Voice AI
-- Image AI
-- PDF Chat
+
+### Backend
+- Python
+
+### Database
 - SQLite
 
-## Features
-- AI Chatbot
-- Voice Assistant
-- Chat History
-- Search Chats
-- Image Upload
+### AI & APIs
+- Groq API (LLM)
+- Google Gemini API
+- OpenAI API (Optional/Supported)
+- Serper API (Google Web Search)
+
+### AI Features
 - PDF Chat
-- Streaming Reply
+- Voice Assistant
+- Image Understanding
+- Live Web Search
+- Streaming AI Responses
+- Chat History
+- User Authentication
 
-## Run
-
-python -m streamlit run app.py
+### Libraries
+- Streamlit
+- LangChain
+- PyPDF2 / pypdf
+- Requests
+- SQLite3
+- python-dotenv
