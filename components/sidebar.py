@@ -9,6 +9,7 @@ def show_sidebar():
     pages = [
         "Dashboard",
         "Chat",
+        "Voice Chat",
         "Documents",
         "Image Chat",
         "Research",

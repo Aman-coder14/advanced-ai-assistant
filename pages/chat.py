@@ -2,6 +2,7 @@ import streamlit as st
 import traceback
 
 from modules.llm import generate_response, get_ai_debug_status
+from modules.voice_service import synthesize_text_to_speech, transcribe_audio
 from services.chat_service import (
     clear_chat,
     create_new_chat,
@@ -153,10 +154,62 @@ def _render_chat_window(user_id: str) -> None:
     for message in messages:
         _render_message(message["role"], message["content"])
 
-    # --- CHAT SUBMISSION LOGIC (PROPERLY INDENTED & ORDERED) ---
-    prompt = st.chat_input("Type your message...")
-    if prompt and prompt.strip():
-        prompt = prompt.strip()
+    if "voice_transcript" not in st.session_state:
+        st.session_state.voice_transcript = ""
+    if "voice_upload_name" not in st.session_state:
+        st.session_state.voice_upload_name = ""
+    if "last_ai_audio" not in st.session_state:
+        st.session_state.last_ai_audio = None
+
+    with st.expander("Voice Chat", expanded=False):
+        audio_file = st.file_uploader(
+            "Upload voice message",
+            type=["wav", "mp3", "m4a", "ogg"],
+            key="voice_upload",
+        )
+        if audio_file:
+            if st.session_state.voice_upload_name != audio_file.name:
+                st.session_state.voice_upload_name = audio_file.name
+                st.session_state.voice_transcript = ""
+            if not st.session_state.voice_transcript:
+                try:
+                    with st.spinner("Transcribing voice..."):
+                        st.session_state.voice_transcript = transcribe_audio(audio_file)
+                except Exception as exc:
+                    st.error(f"Voice transcription failed: {exc}")
+                    st.session_state.voice_transcript = ""
+
+        st.text_area(
+            "Transcribed text",
+            value=st.session_state.voice_transcript,
+            height=130,
+            key="voice_transcript",
+        )
+
+        with st.form(key="voice_text_form", clear_on_submit=True):
+            voice_text = st.text_input("Say (type) and press Enter", key="voice_text_input")
+            submitted = st.form_submit_button("Send")
+            if submitted and voice_text and voice_text.strip():
+                st.session_state.voice_prompt = voice_text.strip()
+
+        if st.button("Send transcribed voice", use_container_width=True, key="send_voice"):
+            st.session_state.voice_prompt = st.session_state.voice_transcript.strip()
+
+        st.checkbox(
+            "Play AI response audio",
+            value=st.session_state.get("play_ai_audio", False),
+            key="play_ai_audio",
+        )
+
+    prompt = None
+    typed_prompt = st.chat_input("Type your message...")
+    if st.session_state.get("voice_prompt"):
+        prompt = st.session_state.voice_prompt
+        st.session_state.voice_prompt = ""
+    elif typed_prompt and typed_prompt.strip():
+        prompt = typed_prompt.strip()
+
+    if prompt:
         chat_id = st.session_state.active_chat_id
 
         if not chat_id:
@@ -198,6 +251,12 @@ def _render_chat_window(user_id: str) -> None:
             except Exception as e:
                 st.warning(f"Assistant save warning: {e}")
 
+            if st.session_state.get("play_ai_audio"):
+                try:
+                    st.session_state.last_ai_audio = synthesize_text_to_speech(assistant_response)
+                except Exception as audio_exc:
+                    st.warning(f"Audio response generation failed: {audio_exc}")
+
         except Exception as exc:
             error_trace = traceback.format_exc()
             st.session_state.last_ai_exception = error_trace
@@ -212,6 +271,9 @@ def _render_chat_window(user_id: str) -> None:
 
         _refresh_chat_history()
         st.rerun()
+
+    if st.session_state.last_ai_audio:
+        st.audio(st.session_state.last_ai_audio, format="audio/mp3")
 
     st.divider()
     if st.button("Clear Chat"):

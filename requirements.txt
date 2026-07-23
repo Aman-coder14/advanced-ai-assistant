@@ -11,3 +11,5 @@ faiss-cpu
 google-generativeai
 torch
 torchvision
+openai-whisper
+gTTS

@@ -8,16 +8,6 @@ root_path = os.path.dirname(os.path.abspath(__file__))
 if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
-# ----------------------------------------------------
-# Your existing imports can follow safely below this:
-# ----------------------------------------------------
-import streamlit as st
-from components.styles import load_css
-from components.sidebar import show_sidebar
-
-from pages.login import show_login
-from pages.register import show_register
-# ... rest of your code
 import streamlit as st
 
 from components.styles import load_css
@@ -27,6 +17,7 @@ from pages.login import show_login
 from pages.register import show_register
 from pages.dashboard import show_dashboard
 from pages.chat import show_chat
+from pages.voice_chat import show_voice_chat
 from pages.image_chat import show_image_chat
 from pages.documents import show_documents
 from pages.research import show_research
@@ -75,6 +66,9 @@ else:
 
     elif selected_page == "Chat":
         show_chat()
+
+    elif selected_page == "Voice Chat":
+        show_voice_chat()
 
     elif selected_page == "Documents":
         show_documents()
