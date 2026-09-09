@@ -13,6 +13,11 @@ from services.chat_service import (
 from database.db import get_connection, init_db
 
 
+def create_users_table():
+    """Backward-compatible initializer for older utility scripts."""
+    init_db()
+
+
 def create_chat(user_id="default", title="New Chat"):
     chat_id = create_new_chat(_resolve_user_id(user_id))
     if title != "New Chat":
@@ -36,7 +41,9 @@ def _resolve_user_id(user_id_or_email):
     init_db()
     value = str(user_id_or_email or "default").strip()
     with get_connection() as conn:
-        row = conn.execute("SELECT id FROM users WHERE id = ?", (value,)).fetchone()
+        row = conn.exec_driver_sql(
+            "SELECT id FROM users WHERE id = %s", (value,)
+        ).mappings().fetchone()
     if row:
         return row["id"]
     return get_or_create_user(value).id

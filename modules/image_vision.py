@@ -1,6 +1,5 @@
 import io
-import os
-from dotenv import load_dotenv
+import streamlit as st
 
 try:
     import google.generativeai as genai
@@ -10,13 +9,10 @@ except ImportError as exc:
         "Install it with `pip install google-generativeai`."
     ) from exc
 
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
 if not GEMINI_API_KEY:
     raise RuntimeError(
-        "Missing GEMINI_API_KEY environment variable. "
-        "Set GEMINI_API_KEY in .env or the process environment."
+        "Missing GEMINI_API_KEY in Streamlit Secrets."
     )
 
 try:

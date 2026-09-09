@@ -1,6 +1,7 @@
 import streamlit as st
 
-from services.chat_service import get_or_create_user
+from auth.login_manager import authenticate_user
+from auth.session_manager import start_session
 
 
 def show_login():
@@ -33,13 +34,15 @@ def show_login():
 
         with col1:
             if st.button("Login"):
-                user = get_or_create_user(email.strip() or "default")
-                st.session_state.logged_in = True
-                st.session_state.user_id = user.id
-                st.session_state.user_email = user.email
-                st.session_state.active_chat_id = st.session_state.get("active_chat_id")
-                st.session_state.page = "Dashboard"
-                st.rerun()
+                try:
+                    user = authenticate_user(email, password)
+                    if user is None:
+                        st.error("Invalid email or password.")
+                    else:
+                        start_session(user)
+                        st.rerun()
+                except Exception as exc:
+                    st.error(f"Login failed: {exc}")
 
         with col2:
             if st.button("Create Account"):

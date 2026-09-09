@@ -1,5 +1,8 @@
 import streamlit as st
 
+from auth.auth import validate_email, validate_password
+from auth.login_manager import register_user
+from auth.session_manager import start_session
 
 def show_register():
 
@@ -36,9 +39,22 @@ def show_register():
 
     with col1:
         if st.button("Register"):
-            st.success(
-                "Frontend Demo: Account Created"
-            )
+            email_error = validate_email(email)
+            password_error = validate_password(password, confirm_password)
+            if email_error:
+                st.error(email_error)
+            elif password_error:
+                st.error(password_error)
+            else:
+                try:
+                    user = register_user(email, name, password, confirm_password)
+                    start_session(user)
+                    st.success("Account created successfully.")
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Registration failed: {exc}")
 
     with col2:
         if st.button("Back to Login"):

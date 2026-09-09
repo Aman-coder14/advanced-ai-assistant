@@ -3,11 +3,24 @@ from __future__ import annotations
 import re
 import uuid
 
+from sqlalchemy import text
+
 from database.db import get_connection, init_db
 from models.chat_model import Chat, Message, User
 
 
 DEFAULT_CHAT_TITLE = "New Chat"
+
+
+def _execute(connection, query: str, params=()):
+    values = {}
+    if isinstance(params, dict):
+        values = params
+    else:
+        for index, value in enumerate(params):
+            query = query.replace("?", f":param_{index}", 1)
+            values[f"param_{index}"] = value
+    return connection.execute(text(query), values).mappings()
 
 
 def get_or_create_user(email: str = "default", name: str = "") -> User:
@@ -16,7 +29,7 @@ def get_or_create_user(email: str = "default", name: str = "") -> User:
     clean_name = (name or clean_email.split("@")[0] or "User").strip()
 
     with get_connection() as conn:
-        row = conn.execute(
+        row = _execute(conn,
             "SELECT id, email, name, created_at FROM users WHERE email = ?",
             (clean_email,),
         ).fetchone()
@@ -24,11 +37,11 @@ def get_or_create_user(email: str = "default", name: str = "") -> User:
             return _user_from_row(row)
 
         user_id = str(uuid.uuid4())
-        conn.execute(
+        _execute(conn,
             "INSERT INTO users (id, email, name) VALUES (?, ?, ?)",
             (user_id, clean_email, clean_name),
         )
-        row = conn.execute(
+        row = _execute(conn,
             "SELECT id, email, name, created_at FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
@@ -39,7 +52,7 @@ def create_new_chat(user_id: str) -> str:
     init_db()
     chat_id = str(uuid.uuid4())
     with get_connection() as conn:
-        conn.execute(
+        _execute(conn,
             "INSERT INTO chats (id, user_id, title) VALUES (?, ?, ?)",
             (chat_id, user_id, DEFAULT_CHAT_TITLE),
         )
@@ -49,7 +62,7 @@ def create_new_chat(user_id: str) -> str:
 def load_chat(chat_id: str) -> list[dict[str, str]]:
     init_db()
     with get_connection() as conn:
-        rows = conn.execute(
+        rows = _execute(conn,
             """
             SELECT id, chat_id, role, content, timestamp
             FROM messages
@@ -71,28 +84,28 @@ def save_message(chat_id: str, role: str, content: str) -> None:
         return
 
     with get_connection() as conn:
-        chat = conn.execute(
+        chat = _execute(conn,
             "SELECT id, title FROM chats WHERE id = ?",
             (chat_id,),
         ).fetchone()
         if not chat:
             raise ValueError("Cannot save message because chat does not exist.")
 
-        conn.execute(
+        _execute(conn,
             """
             INSERT INTO messages (chat_id, role, content)
             VALUES (?, ?, ?)
             """,
             (chat_id, clean_role, clean_content),
         )
-        conn.execute(
+        _execute(conn,
             "UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (chat_id,),
         )
 
         if clean_role == "user" and chat["title"] == DEFAULT_CHAT_TITLE:
             title = generate_chat_title(clean_content)
-            conn.execute(
+            _execute(conn,
                 """
                 UPDATE chats
                 SET title = ?, updated_at = CURRENT_TIMESTAMP
@@ -105,8 +118,8 @@ def save_message(chat_id: str, role: str, content: str) -> None:
 def clear_chat(chat_id: str) -> None:
     init_db()
     with get_connection() as conn:
-        conn.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
-        conn.execute(
+        _execute(conn, "DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+        _execute(conn,
             "UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (chat_id,),
         )
@@ -115,14 +128,14 @@ def clear_chat(chat_id: str) -> None:
 def delete_chat(chat_id: str) -> None:
     init_db()
     with get_connection() as conn:
-        conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+        _execute(conn, "DELETE FROM chats WHERE id = ?", (chat_id,))
 
 
 def rename_chat(chat_id: str, new_title: str) -> None:
     init_db()
     title = (new_title or DEFAULT_CHAT_TITLE).strip() or DEFAULT_CHAT_TITLE
     with get_connection() as conn:
-        conn.execute(
+        _execute(conn,
             """
             UPDATE chats
             SET title = ?, updated_at = CURRENT_TIMESTAMP
@@ -151,7 +164,7 @@ def get_user_chats(user_id: str, search: str = "") -> list[Chat]:
         params.extend([term, term])
 
     with get_connection() as conn:
-        rows = conn.execute(
+        rows = _execute(conn,
             f"""
             SELECT
                 c.id,
@@ -181,7 +194,7 @@ def get_user_chats(user_id: str, search: str = "") -> list[Chat]:
 def get_chat(chat_id: str) -> Chat | None:
     init_db()
     with get_connection() as conn:
-        row = conn.execute(
+        row = _execute(conn,
             """
             SELECT
                 c.id,
@@ -217,7 +230,7 @@ def get_latest_or_create_chat(user_id: str) -> str:
 def get_messages(chat_id: str) -> list[Message]:
     init_db()
     with get_connection() as conn:
-        rows = conn.execute(
+        rows = _execute(conn,
             """
             SELECT id, chat_id, role, content, timestamp
             FROM messages

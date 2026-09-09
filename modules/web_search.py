@@ -1,44 +1,17 @@
 """
 Serper web search integration for current events queries.
 
-This module loads the Serper API key from the local .env file and exposes a
+This module loads the Serper API key from Streamlit Secrets and exposes a
 simple search helper that returns top Google search results.
 """
 
-import os
-from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
-
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-if load_dotenv:
-    load_dotenv()
-else:
-    env_path = Path(__file__).resolve().parents[1] / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+import streamlit as st
 
 def _secret(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if value:
-        return value
-
-    try:
-        import streamlit as st
-
-        return str(st.secrets.get(name, "")).strip()
-    except Exception:
-        return ""
+    return str(st.secrets.get(name, "")).strip()
 
 
 SERPER_API_KEY = _secret("SERPER_API_KEY")
@@ -57,7 +30,7 @@ def search_google(query: str, num_results: int = 5) -> List[Dict[str, Any]]:
     if not SERPER_API_KEY:
         raise RuntimeError(
             "Missing SERPER_API_KEY environment variable. "
-            "Set SERPER_API_KEY in .env or the process environment."
+            "Set SERPER_API_KEY in Streamlit Secrets."
         )
     print("SERPER_KEY_FOUND")
 

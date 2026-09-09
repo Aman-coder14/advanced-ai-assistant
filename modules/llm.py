@@ -12,44 +12,13 @@ debug panel and show a useful error even when a key/package is missing.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any, Dict, List
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-if load_dotenv:
-    load_dotenv()
-else:
-    env_path = Path(__file__).resolve().parents[1] / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-SERPER_API_KEY = os.getenv("SERPER_API_KEY", "").strip()
+import streamlit as st
 
 
 def _secret(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if value:
-        return value
-
-    try:
-        import streamlit as st
-
-        return str(st.secrets.get(name, "")).strip()
-    except Exception:
-        return ""
+    return str(st.secrets.get(name, "")).strip()
 
 
 GROQ_API_KEY = _secret("GROQ_API_KEY")
@@ -57,9 +26,9 @@ GEMINI_API_KEY = _secret("GEMINI_API_KEY")
 OPENAI_API_KEY = _secret("OPENAI_API_KEY")
 SERPER_API_KEY = _secret("SERPER_API_KEY")
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GROQ_MODEL = "openai/gpt-oss-120b"
+GEMINI_MODEL = "gemini-2.5-flash"
+OPENAI_MODEL = "gpt-4o-mini"
 
 CURRENT_EVENT_KEYWORDS = [
     "latest news",
@@ -95,7 +64,7 @@ def generate_response(prompt: str) -> str:
     if not providers:
         raise RuntimeError(
             "No AI API key found. Add GROQ_API_KEY, GEMINI_API_KEY, or "
-            "OPENAI_API_KEY in your deployment secrets or local .env file."
+            "OPENAI_API_KEY in your Streamlit Secrets."
         )
 
     search_context = _get_optional_search_context(prompt)

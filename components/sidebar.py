@@ -1,5 +1,7 @@
 import streamlit as st
 
+from auth.session_manager import end_session
+
 
 def show_sidebar():
     st.sidebar.markdown("# AI Workspace")
@@ -33,8 +35,7 @@ def show_sidebar():
     st.sidebar.info("Frontend Version 1.0")
 
     if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.page = "Login"
+        end_session()
         st.rerun()
 
     return menu
