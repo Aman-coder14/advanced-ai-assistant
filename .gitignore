@@ -1,1 +1,18 @@
-.env 
+.env
+.env.local
+*.db
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+
+# Local test/debug scripts
+debug_search_test.py
+test_gemini.py
+
+# Runtime user uploads
+uploads/images/*
+uploads/pdfs/*
+
+# Runtime vector database
+vector_db/faiss_index/*
+vector_db/metadata/*
