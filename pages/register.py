@@ -6,57 +6,68 @@ from auth.session_manager import start_session
 
 def show_register():
 
-    st.markdown(
-        """
-        <h1 style='text-align:center;'>
-        📝 Create Account
-        </h1>
-        """,
-        unsafe_allow_html=True
-    )
+    _, col, _ = st.columns([1, 1.4, 1])
 
-    name = st.text_input(
-        "Full Name",
-        placeholder="Enter your name"
-    )
+    with col:
+        st.markdown(
+            """
+            <div class="auth-card">
+                <div class="auth-logo">📝</div>
+                <div class="auth-title">Create Account</div>
+                <div class="auth-subtitle">Join AI Workspace — it's free</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    email = st.text_input(
-        "Email",
-        placeholder="Enter your email"
-    )
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
+        name = st.text_input(
+            "Full Name",
+            placeholder="Enter your name",
+        )
 
-    confirm_password = st.text_input(
-        "Confirm Password",
-        type="password"
-    )
+        email = st.text_input(
+            "Email address",
+            placeholder="you@example.com",
+        )
 
-    col1, col2 = st.columns(2)
+        password = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Create a strong password",
+        )
 
-    with col1:
-        if st.button("Register"):
-            email_error = validate_email(email)
-            password_error = validate_password(password, confirm_password)
-            if email_error:
-                st.error(email_error)
-            elif password_error:
-                st.error(password_error)
-            else:
-                try:
-                    user = register_user(email, name, password, confirm_password)
-                    start_session(user)
-                    st.success("Account created successfully.")
-                    st.rerun()
-                except ValueError as exc:
-                    st.error(str(exc))
-                except Exception as exc:
-                    st.error(f"Registration failed: {exc}")
+        confirm_password = st.text_input(
+            "Confirm Password",
+            type="password",
+            placeholder="Re-enter your password",
+        )
 
-    with col2:
-        if st.button("Back to Login"):
-            st.session_state.page = "Login"
-            st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Register", use_container_width=True):
+                email_error = validate_email(email)
+                password_error = validate_password(password, confirm_password)
+                if email_error:
+                    st.error(email_error)
+                elif password_error:
+                    st.error(password_error)
+                else:
+                    try:
+                        user = register_user(email, name, password, confirm_password)
+                        start_session(user)
+                        st.success("Account created successfully.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    except Exception as exc:
+                        st.error(f"Registration failed: {exc}")
+
+        with col2:
+            if st.button("Back to Login", use_container_width=True):
+                st.session_state.page = "Login"
+                st.rerun()

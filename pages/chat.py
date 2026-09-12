@@ -22,7 +22,10 @@ def show_chat():
     _ensure_active_chat(user_id)
 
     st.markdown(
-        '<div class="page-title">AI Chat</div>',
+        """
+        <div class="page-title">💬 AI Chat</div>
+        <div class="page-subtitle">Ask anything — your AI is ready.</div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -78,7 +81,7 @@ def _refresh_chat_history(search: str = "") -> None:
 
 
 def _render_chat_sidebar(user_id: str) -> None:
-    st.subheader("Chats")
+    st.markdown('<div style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#64748B;margin-bottom:10px;">💬 Conversations</div>', unsafe_allow_html=True)
 
     if st.button("New Chat", use_container_width=True):
         chat_id = create_new_chat(user_id)
@@ -307,27 +310,17 @@ def _build_prompt(prompt: str, context_text: str) -> str:
 
 def _render_message(role: str, content: str) -> None:
     if role == "assistant":
-        label = "AI"
-        background = "#182033"
-        border = "#31568f"
+        css_class = "chat-msg-ai"
+        label = "🤖 &nbsp;AI Assistant"
     else:
-        label = "You"
-        background = "#1b1f2a"
-        border = "#30363d"
+        css_class = "chat-msg-user"
+        label = "👤 &nbsp;You"
 
     st.markdown(
         f"""
-        <div style="
-            border: 1px solid {border};
-            background: {background};
-            border-radius: 8px;
-            padding: 12px 14px;
-            margin: 10px 0;
-        ">
-            <div style="font-size: 12px; color: #9CA3AF; margin-bottom: 6px;">
-                {label}
-            </div>
-            <div style="white-space: pre-wrap; color: white;">{_escape_html(content)}</div>
+        <div class="{css_class}">
+            <div class="chat-msg-label">{label}</div>
+            <div class="chat-msg-content">{_escape_html(content)}</div>
         </div>
         """,
         unsafe_allow_html=True,

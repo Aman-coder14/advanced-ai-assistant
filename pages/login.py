@@ -6,34 +6,40 @@ from auth.session_manager import start_session
 
 def show_login():
 
-    st.markdown(
-        """
-        <h1 style='text-align:center;'>
-        🚀 AI Workspace
-        </h1>
-        """,
-        unsafe_allow_html=True
-    )
+    # Centered layout using columns
+    _, col, _ = st.columns([1, 1.4, 1])
 
-    st.markdown("### Login")
+    with col:
+        st.markdown(
+            """
+            <div class="auth-card">
+                <div class="auth-logo">🚀</div>
+                <div class="auth-title">AI Workspace</div>
+                <div class="auth-subtitle">Sign in to your account to continue</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with st.container():
+        st.markdown("<br>", unsafe_allow_html=True)
 
         email = st.text_input(
-            "Email",
-            placeholder="Enter your email"
+            "Email address",
+            placeholder="you@example.com",
         )
 
         password = st.text_input(
             "Password",
             type="password",
-            placeholder="Enter your password"
+            placeholder="Enter your password",
         )
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("Login"):
+            if st.button("Sign In", use_container_width=True):
                 try:
                     user = authenticate_user(email, password)
                     if user is None:
@@ -45,8 +51,21 @@ def show_login():
                     st.error(f"Login failed: {exc}")
 
         with col2:
-            if st.button("Create Account"):
+            if st.button("Create Account", use_container_width=True):
                 st.session_state.page = "Register"
                 st.rerun()
 
-    st.info("Frontend Demo Version")
+        st.markdown(
+            """
+            <div style="
+                text-align: center;
+                margin-top: 20px;
+                font-family: 'Inter', sans-serif;
+                font-size: 12px;
+                color: #475569;
+            ">
+                Frontend Demo Version · AI Workspace v1.0
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

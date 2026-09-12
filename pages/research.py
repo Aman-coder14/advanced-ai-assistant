@@ -4,45 +4,67 @@ import streamlit as st
 def show_research():
 
     st.markdown(
-        '<div class="page-title">🔍 Research Assistant</div>',
-        unsafe_allow_html=True
+        """
+        <div class="page-title">🔍 Research Assistant</div>
+        <div class="page-subtitle">Enter any topic and get an AI-generated research overview.</div>
+        """,
+        unsafe_allow_html=True,
     )
 
     topic = st.text_input(
-        "Research Topic",
-        placeholder="Enter topic..."
+        "Research topic",
+        placeholder="e.g. AI in Healthcare, Quantum Computing, Climate Change...",
     )
 
-    if st.button("🚀 Start Research"):
+    if st.button("🚀 Start Research", use_container_width=False):
 
-        st.success(
-            "Demo research generated successfully."
+        st.success("Research generated successfully.")
+
+        st.markdown(
+            """
+            <div class="result-section">
+                <div class="result-section-title">📋 Summary</div>
+                <div class="result-section-content">
+                    Artificial Intelligence continues to transform industries including software development,
+                    healthcare, finance, and education.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        st.markdown("## Summary")
+        st.markdown(
+            """
+            <div class="result-section">
+                <div class="result-section-title">📊 Analysis</div>
+                <div class="result-section-content">
+                    AI adoption is growing rapidly. Companies increasingly automate repetitive
+                    tasks while requiring engineers with AI skills.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        st.info("""
-        Artificial Intelligence continues to transform
-        industries including software development,
-        healthcare, finance, and education.
-        """)
-
-        st.markdown("## Analysis")
-
-        st.write("""
-        AI adoption is growing rapidly.
-        Companies increasingly automate repetitive
-        tasks while requiring engineers with AI skills.
-        """)
-
-        st.markdown("## Sources")
-
-        st.write("- Source 1")
-        st.write("- Source 2")
-        st.write("- Source 3")
+        st.markdown(
+            """
+            <div class="result-section">
+                <div class="result-section-title">🔗 Sources</div>
+                <div class="result-section-content">
+                    · Source 1<br>· Source 2<br>· Source 3
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     else:
-
-        st.info(
-            "Enter a topic and click Start Research."
+        st.markdown(
+            """
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-text">Enter a topic above and click <strong>Start Research</strong> to generate an AI-powered report.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )

@@ -16,3 +16,8 @@ uploads/pdfs/*
 # Runtime vector database
 vector_db/faiss_index/*
 vector_db/metadata/*
+
+# Virtual environments
+venv/
+.venv/
+env/

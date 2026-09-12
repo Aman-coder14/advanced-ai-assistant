@@ -5,8 +5,11 @@ from components.cards import metric_card, activity_card
 def show_dashboard():
 
     st.markdown(
-        '<div class="page-title">🏠 Dashboard</div>',
-        unsafe_allow_html=True
+        """
+        <div class="page-title">⬡ Dashboard</div>
+        <div class="page-subtitle">Welcome back — here's your workspace at a glance.</div>
+        """,
+        unsafe_allow_html=True,
     )
 
     col1, col2, col3, col4 = st.columns(4)
@@ -23,43 +26,41 @@ def show_dashboard():
     with col4:
         metric_card("Status", "Active")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
     st.markdown(
         '<div class="section-title">⚡ Quick Actions</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     q1, q2, q3, q4 = st.columns(4)
 
     with q1:
-        st.button("💬 New Chat")
+        st.button("💬 New Chat", use_container_width=True)
 
     with q2:
-        st.button("📄 Upload")
+        st.button("📄 Upload", use_container_width=True)
 
     with q3:
-        st.button("🔍 Research")
+        st.button("🔍 Research", use_container_width=True)
 
     with q4:
-        st.button("📚 History")
+        st.button("📚 History", use_container_width=True)
 
     st.markdown(
         '<div class="section-title">📌 Recent Activity</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     activity_card(
-        "DBMS Chat",
-        "Asked questions about Normalization and SQL."
+        "💬  DBMS Chat",
+        "Asked questions about Normalization and SQL.",
     )
 
     activity_card(
-        "Uploaded Resume",
-        "Resume.pdf uploaded successfully."
+        "📄  Uploaded Resume",
+        "Resume.pdf uploaded successfully.",
     )
 
     activity_card(
-        "Research Task",
-        "AI Jobs Market 2026 Analysis."
+        "🔍  Research Task",
+        "AI Jobs Market 2026 Analysis.",
     )

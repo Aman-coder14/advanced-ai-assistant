@@ -10,12 +10,15 @@ from datetime import datetime
 def show_documents():
 
     st.markdown(
-        '<div class="page-title">📄 Documents</div>',
-        unsafe_allow_html=True
+        """
+        <div class="page-title">📄 Documents</div>
+        <div class="page-subtitle">Upload PDFs and ask questions using AI-powered RAG.</div>
+        """,
+        unsafe_allow_html=True,
     )
 
     uploaded_files = st.file_uploader(
-        "Upload PDF Documents",
+        "Drop PDF files here or click to browse",
         type=["pdf"],
         accept_multiple_files=True,
     )
@@ -46,10 +49,10 @@ def show_documents():
                         st.error(f"Failed to create embeddings for RAG: {exc}")
 
                     st.markdown(
-                        f"<div class=\"section-title\">{uploaded_file.name}</div>",
+                        f'<div class="section-title">📑 {uploaded_file.name}</div>',
                         unsafe_allow_html=True,
                     )
-                    st.markdown(f"<p>Pages: {num_pages}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='color:#64748B;font-size:13px;'>Pages: {num_pages}</p>", unsafe_allow_html=True)
                     st.text_area("Preview", value=preview, height=240)
                 except Exception as exc:
                     st.error(f"Failed to extract text from {uploaded_file.name}: {exc}")
@@ -59,12 +62,12 @@ def show_documents():
 
     # --- PDF Question Answering UI ---
     st.markdown(
-        '<div class="section-title">Ask about the uploaded PDF</div>',
+        '<div class="section-title">🔎 Ask About the Uploaded PDF</div>',
         unsafe_allow_html=True,
     )
 
-    question = st.text_input("Ask a question about this PDF")
-    ask_clicked = st.button("Ask")
+    question = st.text_input("Your question", placeholder="What is this document about?")
+    ask_clicked = st.button("Ask AI", use_container_width=False)
 
     if ask_clicked and question:
         pdf_text = st.session_state.get("uploaded_pdf_text", "").strip()
@@ -109,10 +112,16 @@ def show_documents():
 
                     st.session_state.last_pdf_qa = {"question": question, "answer": answer, "source": "Uploaded PDF (RAG)", "retrieved_count": retrieved_count}
 
-                    st.markdown(f"**Question:** {question}")
-                    st.markdown(f"**Answer:** {answer}")
-                    st.markdown(f"**Retrieved Chunks Count:** {retrieved_count}")
-                    st.markdown("**Source:** Uploaded PDF (RAG)")
+                    st.markdown(
+                        f"""
+                        <div class="answer-card">
+                            <div class="answer-label">✦ Answer · Uploaded PDF (RAG)</div>
+                            <div class="answer-content"><strong>Q:</strong> {question}<br><br>{answer}</div>
+                        </div>
+                        <p style="font-size:12px;color:#64748B;margin-top:8px;">Retrieved {retrieved_count} chunks</p>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                     return
 
         # If RAG did not return a confident answer, fall back to full PDF text or web
@@ -159,13 +168,19 @@ def show_documents():
                 source = "Error"
 
         st.session_state.last_pdf_qa = {"question": question, "answer": answer, "source": source}
-        st.markdown(f"**Question:** {question}")
-        st.markdown(f"**Answer:** {answer}")
-        st.markdown(f"**Source:** {source}")
+        st.markdown(
+            f"""
+            <div class="answer-card">
+                <div class="answer-label">✦ Answer · {source}</div>
+                <div class="answer-content"><strong>Q:</strong> {question}<br><br>{answer}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown(
-        '<div class="section-title">Uploaded Documents</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">🗂️ Uploaded Documents</div>',
+        unsafe_allow_html=True,
     )
 
     document_card(
@@ -191,7 +206,7 @@ def show_documents():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.button("👁 View Selected")
+        st.button("👁 View Selected", use_container_width=True)
 
     with col2:
-        st.button("🗑 Delete Selected")
+        st.button("🗑 Delete Selected", use_container_width=True)

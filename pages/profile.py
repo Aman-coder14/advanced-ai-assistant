@@ -5,14 +5,19 @@ from components.cards import profile_card
 def show_profile():
 
     st.markdown(
-        '<div class="page-title">👤 Profile</div>',
-        unsafe_allow_html=True
+        """
+        <div class="page-title">👤 Profile</div>
+        <div class="page-subtitle">Your account information and workspace stats.</div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    profile_card(
-        "Aman Singh",
-        "aman@example.com"
-    )
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        profile_card(
+            "Aman Singh",
+            "aman@example.com",
+        )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -24,11 +29,22 @@ def show_profile():
     with col2:
         st.metric("Documents", "12")
 
-    st.markdown("### Account Information")
+    st.markdown(
+        '<div class="section-title">ℹ️ Account Information</div>',
+        unsafe_allow_html=True,
+    )
 
-    st.write("📅 Joined: January 2026")
-    st.write("🎓 Student")
-    st.write("💻 CSE Engineer")
-    st.write("🚀 AI Workspace User")
+    st.markdown(
+        """
+        <div class="custom-card">
+            <p>📅 &nbsp;<strong>Joined:</strong> January 2026</p>
+            <p>🎓 &nbsp;<strong>Role:</strong> Student</p>
+            <p>💻 &nbsp;<strong>Major:</strong> CSE Engineer</p>
+            <p>🚀 &nbsp;<strong>Plan:</strong> AI Workspace User</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.button("✏ Edit Profile")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.button("✏ Edit Profile", use_container_width=False)
